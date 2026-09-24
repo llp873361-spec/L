@@ -233,7 +233,6 @@ function draw() {
 	}
 	const fx = lay.fx || {}
 	const cam = lay.camera
-	rd.setClearColor(0x000000, 1)
 	if (fx.lens) {
 		const l = fx.lens
 		cam.layers.set(1)

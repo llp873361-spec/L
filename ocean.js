@@ -228,14 +228,13 @@ void main() {
 	vec3 p = normalize(vl);
 	float nv = max(dot(N, V), 0.);
 	float lt = clamp(N.y * 0.5 + 0.5, 0., 1.);
-	float dep = 1. - lif(vw.y);
 	float m = fb3(p * 3. + vs * 23.);
 	vec3 id;
 	float aa = aaf(p * 15.);
 	float sp = sdt(p, 15., vs, 0.72, 0.16, 0.34, id);
 	float fz = vn(p * 90. + ut * 0.3);
 	float rim = clamp(pow(1. - nv, 1.6) * (0.65 + 0.7 * fz), 0., 1.);
-	float v = 0.28 + 0.2 * lt + 0.12 * m - 0.12 * nv * nv - dep * 0.1 + sp * aa * 0.3 + (1. - aa) * 0.08 + rim * 0.62 + cau(vw) * max(N.y, 0.) * 0.06;
+	float v = 0.28 + 0.2 * lt + 0.12 * m - 0.12 * nv * nv + sp * aa * 0.3 + (1. - aa) * 0.08 + rim * 0.62 + cau(vw) * max(N.y, 0.) * 0.06;
 	vec3 a, b;
 	ff = fgi(vw, fg);
 	vec3 c = cwf(pk2, pk4, pk5, pk6, vec4(0., 0.35, 0.68, 1.), v, 0., fg, ff, a, b);
@@ -247,7 +246,6 @@ void main() {
 	vec3 p = normalize(vl);
 	float nv = max(dot(N, V), 0.);
 	float lt = clamp(N.y * 0.5 + 0.5, 0., 1.);
-	float dep = 1. - lif(vw.y);
 	vec3 o = (vw - vce) / vr;
 	float cl = 0.;
 	for (int k = 1; k <= 3; k++) {
@@ -260,7 +258,7 @@ void main() {
 	float dp = sdt(p, 13., vs, 0.42, 0.12, 0.26, id) * aa;
 	float hl = smoothstep(0.55, 1., dp);
 	float fr = pow(1. - nv, 2.5);
-	float v = 0.6 + 0.1 * lt + cl * 0.22 + fr * 0.14 - dep * 0.1 + dp * 0.08 + hl * 0.3 + cau(vw) * max(N.y, 0.) * 0.05;
+	float v = 0.6 + 0.1 * lt + cl * 0.22 + fr * 0.14 + dp * 0.08 + hl * 0.3 + cau(vw) * max(N.y, 0.) * 0.05;
 	vec3 a, b;
 	ff = fgi(vw, fg);
 	vec3 c = cwf(pk1, pk2, pk3, pk6, vec4(0., 0.3, 0.72, 1.), v, 1., fg, ff, a, b);
@@ -271,13 +269,12 @@ void main() {
 	vec3 N = normalize(vnr), V = normalize(cameraPosition - vw);
 	vec3 p = normalize(vl);
 	float lt = clamp(N.y * 0.5 + 0.5, 0., 1.);
-	float dep = 1. - lif(vw.y);
 	float du = fb3(p * 2.6 + vs * 17.);
 	float rg = 1. - abs(du * 2. - 1.);
 	float q = (p.y * 3.2 + du * 1.8 + p.x * 0.6) * 26.;
 	float aa = clamp(1.3 - fwidth(q) * 1.2, 0., 1.);
 	float s = sin(q);
-	float v = 0.42 + 0.4 * lt * (0.7 + 0.3 * rg) + pow(1. - max(dot(N, V), 0.), 3.) * 0.15 + smoothstep(0.5, 1., s) * aa * 0.1 - smoothstep(0.55, 1., -s) * aa * 0.08 - (1. - rg) * 0.05 - dep * 0.14 + cau(vw) * max(N.y, 0.) * 0.06;
+	float v = 0.46 + 0.44 * lt * (0.7 + 0.3 * rg) + pow(1. - max(dot(N, V), 0.), 3.) * 0.15 + smoothstep(0.5, 1., s) * aa * 0.1 - smoothstep(0.55, 1., -s) * aa * 0.08 - (1. - rg) * 0.05 + cau(vw) * max(N.y, 0.) * 0.06;
 	vec3 a, b;
 	ff = fgi(vw, fg);
 	vec3 c = cwf(pk4, pk5, pk6, pk7, vec4(0., 0.36, 0.8, 1.), v, 0., fg, ff, a, b);
@@ -318,7 +315,7 @@ export function make(rd, seed) {
 	const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 420)
 	camera.rotation.order = 'YXZ'
 	camera.position.set(0, -24, 30)
-	camera.rotation.set(-0.06, 0, 0)
+	camera.rotation.set(0.1, 0, 0)
 	const bms = []
 	for (let i = 0; i < 8; i++) bms.push(new THREE.Vector4((R() * 2 - 1) * 42 - 4, R() * 75 - 50, 1.6 + R() * 2, R()))
 	const u = { ut: { value: 0 }, bms: { value: bms }, pr: { value: 1 }, ph: { value: 400 } }
@@ -369,7 +366,7 @@ void main() {
 				} else {
 					s = 0.2 + 2.8 * Math.pow(R(), 3.4)
 					x = (R() * 2 - 1) * 70
-					y = -6 - R() * 52
+					y = -6 - Math.pow(R(), 0.85) * 58
 					z = (R() * 2 - 1) * 70
 				}
 				if (ok(x, y, z, s)) break
