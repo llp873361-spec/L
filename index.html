@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>粉色星空</title>
+<style>
+html, body {
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+	background: var(--c1);
+}
+body {
+	font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+canvas {
+	position: fixed;
+	left: 0;
+	top: 0;
+	display: block;
+	touch-action: none;
+	outline: none;
+}
+#tip {
+	position: fixed;
+	left: 0;
+	top: 0;
+	transform: translate(-50%, -50%);
+	color: var(--c3);
+	font-size: 13px;
+	letter-spacing: .5em;
+	text-indent: .5em;
+	opacity: 0;
+	transition: opacity .5s;
+	pointer-events: none;
+	white-space: nowrap;
+}
+#cnt {
+	position: fixed;
+	right: max(16px, env(safe-area-inset-right));
+	bottom: max(14px, env(safe-area-inset-bottom));
+	color: var(--c3);
+	font-size: 12px;
+	letter-spacing: .2em;
+	opacity: 0;
+	transition: opacity .8s;
+	pointer-events: none;
+}
+#fps {
+	position: fixed;
+	left: 10px;
+	top: 8px;
+	color: var(--c6);
+	font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+	pointer-events: none;
+	display: none;
+	white-space: pre;
+}
+#fb {
+	position: fixed;
+	inset: 0;
+	display: none;
+}
+#fb p {
+	position: absolute;
+	left: 16px;
+	right: 16px;
+	bottom: 14%;
+	margin: 0;
+	text-align: center;
+	color: var(--c6);
+	font-size: 14px;
+	letter-spacing: .15em;
+	line-height: 1.8;
+}
+</style>
+<script type="importmap">
+{
+	"imports": {
+		"three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+		"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+	}
+}
+</script>
+</head>
+<body>
+<div id="fb"><p></p></div>
+<div id="tip"></div>
+<div id="cnt"></div>
+<div id="fps"></div>
+<script type="module">
+import { pal } from './palette.js'
+
+const st = document.documentElement.style
+pal.forEach((c, i) => st.setProperty('--c' + i, c))
+
+function fb(msg) {
+	const g = []
+	for (let i = 0; i < 90; i++) {
+		const x = (Math.random() * 100).toFixed(1)
+		const y = (Math.random() * 100).toFixed(1)
+		const s = (0.8 + Math.pow(Math.random(), 4) * 2.4).toFixed(1)
+		const c = s > 2.4 ? 'var(--c6)' : Math.random() < 0.6 ? 'var(--c5)' : 'var(--c6)'
+		g.push(`radial-gradient(${s}px ${s}px at ${x}% ${y}%, ${c}, transparent)`)
+	}
+	g.push('radial-gradient(circle at 50% 44%, var(--c0) 0 30px, var(--c7) 31px 32px, var(--c4) 34px, transparent 48px)')
+	g.push('radial-gradient(ellipse 70% 18% at 50% 44%, var(--c4), transparent 70%)')
+	g.push('radial-gradient(ellipse 55% 35% at 28% 30%, var(--c2), transparent 72%)')
+	g.push('radial-gradient(ellipse 45% 30% at 75% 70%, var(--c2), transparent 70%)')
+	g.push('linear-gradient(165deg, var(--c1), var(--c0))')
+	const el = document.getElementById('fb')
+	el.style.background = g.join(',')
+	el.querySelector('p').textContent = msg
+	el.style.display = 'block'
+}
+
+let ok = false
+try {
+	ok = !!document.createElement('canvas').getContext('webgl2')
+} catch (e) {
+	console.log('检测 WebGL2 的时候出错了', e)
+}
+if (!ok) {
+	console.log('没有 WebGL2，换成静态星空')
+	fb('你的浏览器不支持 WebGL2，只能先看这张静态的粉色星空。换个新一点的浏览器再来吧。')
+} else {
+	import('./main.js').then(m => m.start(fb)).catch(e => {
+		console.log('场景启动失败', e)
+		fb('场景没能加载出来，刷新一下试试。')
+	})
+}
+</script>
+</body>
+</html>
