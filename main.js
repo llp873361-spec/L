@@ -6,6 +6,7 @@ import * as city from './worlds/city.js'
 import * as flower from './worlds/flower.js'
 import * as rain from './worlds/rain.js'
 import * as desert from './worlds/desert.js'
+import * as mirror from './worlds/mirror.js'
 
 const mob = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
 const rm = matchMedia('(prefers-reduced-motion: reduce)')
@@ -15,7 +16,7 @@ const tip = document.getElementById('tip')
 const cnt = document.getElementById('cnt')
 const fpe = document.getElementById('fps')
 const bkb = document.getElementById('back')
-const wld = { city, flower, rain, desert }
+const wld = { city, flower, rain, desert, mirror }
 
 let rd, W = 1, H = 1
 let pr = Math.min(devicePixelRatio || 1, mob ? 1.5 : 2)
@@ -563,6 +564,13 @@ function frame(now) {
 		inp.fly = !!tr && (tr.ph === 'push' || tr.ph === 'pull')
 		inp.rm = rm.matches
 		lay.fx = lay.update(dt, clk, inp) || {}
+		if (lay.fx.go === 'sky' && !tr) {
+			tip.style.opacity = 0
+			rd.domElement.style.cursor = ''
+			bkb.style.display = 'none'
+			bk = null
+			tr = { ph: 'still', t: 0, fr: 0, nm: 'sky' }
+		}
 		if (!tr) hover()
 	}
 	draw()

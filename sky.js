@@ -61,14 +61,14 @@ export function dist(asp) {
 	return Math.max(23, 5.6 / (Math.tan(fov * Math.PI / 360) * asp))
 }
 
-export function build(rd, seed) {
+export function build(rd, seed, lite) {
 	const mob = !!rd.mob
 	const R = rng(seed)
 	const grp = new THREE.Group()
 	const far = new THREE.Group()
 	const u = {
 		ut: { value: 0 }, vt: { value: 0 }, hov: { value: 0 }, pr: { value: 1 },
-		rs: { value: new THREE.Vector2(1, 1) }, sd: { value: R() * 50 }
+		rs: { value: new THREE.Vector2(1, 1) }, sd: { value: R() * 50 }, sr: { value: 1.1 }, hz: { value: -2 }
 	}
 	const v2 = new THREE.Vector2()
 	const tmp = new THREE.Vector3()
@@ -113,7 +113,7 @@ void main() {
 	const bg = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), new THREE.ShaderMaterial({
 		side: THREE.BackSide,
 		depthWrite: false,
-		uniforms: { cub: { value: crt.texture } },
+		uniforms: { cub: { value: crt.texture }, sr: u.sr },
 		vertexShader: `varying vec3 vd;
 void main() {
 	vd = position;
@@ -121,9 +121,10 @@ void main() {
 }`,
 		fragmentShader: `${glsl}
 uniform samplerCube cub;
+uniform float sr;
 varying vec3 vd;
 void main() {
-	gl_FragColor = vec4(dsp(textureCube(cub, normalize(vd)).rgb), 1.);
+	gl_FragColor = vec4(dsp(mix(pk0, textureCube(cub, normalize(vd)).rgb, 0.3 + 0.7 * min(sr, 1.))), 1.);
 }`
 	}))
 	bg.renderOrder = -2
@@ -157,13 +158,13 @@ void main() {
 		g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
 		g.setAttribute('ai', new THREE.BufferAttribute(ai, 3))
 		const pts = new THREE.Points(g, new THREE.ShaderMaterial({
-			uniforms: { ut: u.ut, pr: u.pr },
+			uniforms: { ut: u.ut, pr: u.pr, sr: u.sr, hz: u.hz },
 			blending: THREE.AdditiveBlending,
 			depthWrite: false,
 			transparent: true,
 			vertexShader: `${glsl}
 attribute vec3 ai;
-uniform float ut, pr;
+uniform float ut, pr, sr, hz;
 varying vec3 vc;
 varying float va;
 void main() {
@@ -172,7 +173,8 @@ void main() {
 	float tw = 0.72 + 0.28 * sin(ut * (0.5 + fract(ai.z * 13.7) * 2.5) + ai.z * 6.283);
 	float s = ai.x * pr;
 	gl_PointSize = max(s, 1.6 * pr) * 2.4;
-	va = tw * clamp(s / (1.6 * pr), 0.3, 1.);
+	float th = fract(ai.z * 91.7) * (1. - 0.75 * clamp((ai.x - 0.85) / 4., 0., 1.));
+	va = tw * clamp(s / (1.6 * pr), 0.3, 1.) * smoothstep(th, th + 0.015, sr) * step(hz * 800., position.y);
 	vec3 c = ai.y < 0.5 ? mix(pk5, pk6, ai.y * 2.) : mix(pk6, pk7, (ai.y - 0.5) * 2.);
 	vc = dsp(c);
 }`,
@@ -293,7 +295,7 @@ void main() {
 	grp.add(pho)
 
 	const nv = mob ? 4000 : 8000
-	{
+	if (!lite) {
 		const g = new THREE.InstancedBufferGeometry()
 		g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0], 3))
 		g.setAttribute('cn', new THREE.Float32BufferAttribute([0, -1, 1, -1, 0, 1, 1, 1], 2))
@@ -370,7 +372,7 @@ void main() {
 		grp.add(vx)
 	}
 
-	const nmx = 3, nsp = 96
+	const nmx = lite ? 0 : 3, nsp = 96
 	const trm = new THREE.ShaderMaterial({
 		...add,
 		side: THREE.DoubleSide,
@@ -550,7 +552,7 @@ void main() {
 		crt.dispose()
 	}
 
-	return { grp, far, upd, lens, dispose }
+	return { grp, far, upd, lens, dispose, sr: u.sr, hz: u.hz, pr: u.pr }
 }
 
 export function make(rd, seed) {
