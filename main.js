@@ -677,7 +677,7 @@ export function start(fb) {
 	ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
 	mats()
 	size()
-	if (qs.has('fps')) fpe.style.display = 'block'
+	if (qs.has('fps') || location.hash === '#fps') fpe.style.display = 'block'
 	swap('sky')
 	tr = { ph: 'in', t: 0 }
 	ov.blk = 1
