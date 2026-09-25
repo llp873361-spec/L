@@ -61,8 +61,8 @@ vec4 pet(float v, vec3 wp, float to) {
 
 function fgeo(n, len, wid, cup, rows) {
 	const P = [], N = [], K = [], I = []
-	for (let r = 0; r < 4; r++) {
-		const t = r / 3
+	for (let r = 0; r < 7; r++) {
+		const t = r / 6
 		for (const sd of [-1, 1]) {
 			P.push(0, 0, 0)
 			N.push(0, 0, 1)
@@ -296,31 +296,51 @@ vec3 rta(vec3 v, vec3 k, float a) {
 	float c = cos(a), s = sin(a);
 	return v * c + cross(k, v) * s + k * dot(k, v) * (1. - c);
 }
+vec2 dl, wd;
+float th0, kk, wa, wb;
+vec3 tgf(float s) {
+	float th = th0 * (0.6 + 0.8 * s) + kk * s * s;
+	float al = wa * (0.1 + 0.9 * s * s);
+	vec2 h = dl * sin(th) + wd * sin(al) + vec2(-wd.y, wd.x) * wb * s;
+	return normalize(vec3(h.x, cos(th) * cos(al), h.y));
+}
+vec3 crv(float s) {
+	return (tgf(0.2113249 * s) + tgf(0.7886751 * s)) * 0.5 * s;
+}
 void main() {
 	vec3 rt = vec3(ai.x, 0., ai.y);
 	vec2 w = texture2D(wtx, (rt.xz - org) / ${f4(wsz)}).xy;
 	float c = cos(w.y), s = sin(w.y);
-	vec2 wd = vec2(dwn.x * c - dwn.y * s, dwn.x * s + dwn.y * c);
-	float fl = sin(ut * 3.1 + ac.w * 6.283 + ai.x * 1.3) * 0.05 * (0.4 + w.x);
-	vec2 bd = wd * min(w.x * 0.5 + fl, 0.8);
+	wd = vec2(dwn.x * c - dwn.y * s, dwn.x * s + dwn.y * c);
+	float h1 = fract(ac.z * 13.7), h2 = fract(ac.w * 5.3), h3 = fract(ac.z * 7.1 + ac.w * 3.3);
+	dl = vec2(cos(ac.w * 43.98), sin(ac.w * 43.98));
+	th0 = 0.05 + 0.27 * h1;
+	kk = -0.25 + 0.8 * h2;
+	float fq = 2.2 + 1.6 * h2 + (0.6 - ai.z) * 2.;
+	float os = sin(ut * fq + ac.w * 6.283 + ai.x * 1.3);
+	wa = min(w.x * 0.95 * (0.6 + 0.8 * h3) + os * (0.05 + 0.12 * w.x), 1.45);
+	wb = sin(ut * fq * 1.3 + ac.z * 6.283) * 0.04 * (0.4 + w.x);
 	float lod = 1. - smoothstep(${f4(fr * 0.75)}, ${f4(fr)}, distance(rt.xz, cameraPosition.xz));
 	float H = ai.z * lod;
-	float sq = 1. - 0.3 * dot(bd, bd);
-	float fp = smoothstep(0.5, 1.2, w.x + fl);
+	float fp = smoothstep(0.5, 1.15, wa);
 	vec3 p, n;
 	if (kd.x < 0.5) {
 		float t = kd.y;
-		vec3 cc = rt + vec3(bd.x * H * t * t, H * t * sq, bd.y * H * t * t);
+		vec3 cc = rt + crv(t) * H;
 		vec3 tc = normalize(cameraPosition - cc);
-		p = cc + normalize(cross(vec3(0., 1., 0.), tc)) * kd.z * 0.0045 * lod;
+		vec3 ac2 = cross(tgf(t), tc);
+		p = cc + ac2 / max(length(ac2), 1e-4) * kd.z * 0.0045 * lod;
 		n = tc;
 		vc = vec4(ac.x, ac.z, 0., lod);
 	} else {
-		vec3 hd = rt + vec3(bd.x * H, H * sq, bd.y * H);
-		float th = length(bd) * 2.1;
-		vec3 k = normalize(vec3(wd.y, 0., -wd.x));
-		p = hd + rta(rty(position * ac.y * lod, ai.w), k, th);
-		n = rta(rty(normal, ai.w), k, th);
+		vec3 hd = rt + crv(1.) * H;
+		vec3 tt = tgf(1.);
+		float tl = acos(clamp(tt.y, -1., 1.));
+		vec3 ax = cross(vec3(0., 1., 0.), tt);
+		float sl = length(ax);
+		vec3 k = sl > 1e-4 ? ax / sl : vec3(1., 0., 0.);
+		p = hd + rta(rty(position * ac.y * lod, ai.w), k, tl);
+		n = rta(rty(normal, ai.w), k, tl);
 		vc = vec4(ac.x, ac.z, fp, lod);
 	}
 	vw = p;
@@ -337,7 +357,7 @@ varying vec4 vc;
 void main() {
 	float v;
 	if (vk.x < 0.5) {
-		v = 0.04 + 0.16 * vk.y;
+		v = 0.1 + 0.2 * vk.y + 0.06 * vc.y;
 	} else if (vk.x < 1.5) {
 		float t = vk.y;
 		if (abs(vk.z) > 1. - pow(max(t * 1.3 - 0.3, 0.), 2.2) * 0.9 || t > 0.98) discard;
@@ -358,6 +378,89 @@ void main() {
 		scene.add(im)
 		fls.push(im)
 	})
+
+	{
+		const nl = mob ? 8000 : 24000
+		const P = [], B = [], I = []
+		for (let r = 0; r <= 5; r++) {
+			P.push(0, 0, 0, 0, 0, 0)
+			B.push(r, -1, r, 1)
+			if (r) {
+				const o = (r - 1) * 2
+				I.push(o, o + 1, o + 3, o, o + 3, o + 2)
+			}
+		}
+		const g = new THREE.InstancedBufferGeometry()
+		g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
+		g.setAttribute('bp', new THREE.Float32BufferAttribute(B, 2))
+		g.setIndex(I)
+		const la = new Float32Array(nl * 4), lb = new Float32Array(nl * 4)
+		let i = 0
+		while (i < nl) {
+			const r = 0.8 + Math.pow(R(), 0.7) * (fr * 0.62 - 0.8), a = -Math.PI / 2 + (R() - 0.5) * 2.5
+			const x = cam0.x + Math.cos(a) * r, z = cam0.z + Math.sin(a) * r
+			if (Math.abs(x - pth(z)) < 0.2) continue
+			const m = 3 + Math.floor(R() * 4)
+			for (let k = 0; k < m && i < nl; k++, i++) {
+				la.set([x + (R() - 0.5) * 0.06, z + (R() - 0.5) * 0.06, 0.12 + R() * 0.22, R() * 6.283], i * 4)
+				lb.set([0.15 + R() * 0.5, 0.4 + R() * 1.4, 0.008 + R() * 0.008, R()], i * 4)
+			}
+		}
+		g.setAttribute('la', new THREE.InstancedBufferAttribute(la, 4))
+		g.setAttribute('lb', new THREE.InstancedBufferAttribute(lb, 4))
+		g.instanceCount = nl
+		const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
+			uniforms: u,
+			side: THREE.DoubleSide,
+			vertexShader: `${glsl}
+${nois}
+${fg}
+attribute vec2 bp;
+attribute vec4 la, lb;
+uniform sampler2D wtx;
+uniform vec2 org;
+varying vec3 vw;
+varying vec2 vb;
+varying float vr;
+vec2 dl, wd;
+float wa;
+vec3 tgl(float s) {
+	float th = lb.x + lb.y * s * s;
+	float al = wa * (0.2 + 0.8 * s);
+	vec2 h = dl * sin(th) + wd * sin(al);
+	return normalize(vec3(h.x, cos(th) * cos(al), h.y));
+}
+void main() {
+	vec2 w = texture2D(wtx, (la.xy - org) / ${f4(wsz)}).xy;
+	float c = cos(w.y), s = sin(w.y);
+	wd = vec2(dwn.x * c - dwn.y * s, dwn.x * s + dwn.y * c);
+	dl = vec2(cos(la.w), sin(la.w));
+	wa = min(w.x * 0.5, 0.9) + sin(ut * 4.3 + lb.w * 6.283 + la.x) * 0.05 * (0.3 + w.x);
+	float u = bp.x / 5.;
+	float lod = 1. - smoothstep(${f4(fr * 0.45)}, ${f4(fr * 0.62)}, distance(la.xy, cameraPosition.xz));
+	vec3 p = vec3(la.x, 0., la.y) + (tgl(0.2113249 * u) + tgl(0.7886751 * u)) * 0.5 * u * la.z * lod;
+	p += vec3(-dl.y, 0., dl.x) * bp.y * lb.z * (1. - pow(u, 1.6) * 0.9) * lod * 0.5;
+	vw = p;
+	vb = vec2(u, bp.y);
+	vr = lb.w;
+	gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.);
+}`,
+			fragmentShader: `${glsl}
+${nois}
+${fg}
+uniform float trs;
+varying vec3 vw;
+varying vec2 vb;
+varying float vr;
+void main() {
+	float bl = pow(max(dot(normalize(vw - cameraPosition), sn), 0.), 3.) * trs;
+	float v = 0.04 + 0.26 * vb.x + 0.1 * vr - 0.04 * (1. - abs(vb.y)) + bl * 0.25 * vb.x;
+	gl_FragColor = pet(v, vw, 0.);
+}`
+		}))
+		m.frustumCulled = false
+		scene.add(m)
+	}
 
 	{
 		const np = mob ? 250 : 500
