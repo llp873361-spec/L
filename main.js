@@ -4,6 +4,8 @@ import * as sky from './sky.js'
 import * as ocean from './ocean.js'
 import * as city from './worlds/city.js'
 import * as flower from './worlds/flower.js'
+import * as rain from './worlds/rain.js'
+import * as desert from './worlds/desert.js'
 
 const mob = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
 const rm = matchMedia('(prefers-reduced-motion: reduce)')
@@ -13,12 +15,12 @@ const tip = document.getElementById('tip')
 const cnt = document.getElementById('cnt')
 const fpe = document.getElementById('fps')
 const bkb = document.getElementById('back')
-const wld = { city, flower }
+const wld = { city, flower, rain, desert }
 
 let rd, W = 1, H = 1
 let pr = Math.min(devicePixelRatio || 1, mob ? 1.5 : 2)
 let rtA, rtB, rtC, bl, quad, ocam
-let mLens, mZoom, mBri, mBlur, mFin
+let mLens, mZoom, mBri, mBlur, mFin, mHaze
 let lay = null, lnm = '', tr = null, run = true, last = 0, clk = 0
 let ptr = false, pd = null, pin = 0, fail = null, bk = null
 let ft = 1 / 60, fchk = 0, fsw = 0
@@ -103,6 +105,17 @@ void main() {
 	}
 	gl_FragColor = vec4(s / w, 1.);
 }`, { src: { value: null }, ctr: { value: new THREE.Vector2() }, amt: { value: 0 } })
+
+	mHaze = sm(`${nois}
+uniform sampler2D src;
+uniform vec3 hz;
+varying vec2 vu;
+void main() {
+	float b = exp(-pow((vu.y - hz.x) / 0.04, 2.)) * hz.y;
+	float n = vn(vec3(vu.x * 70., vu.y * 160. - hz.z * 4., hz.z * 0.9)) - 0.5;
+	float m = vn(vec3(vu.x * 26., vu.y * 70. - hz.z * 2.5, 3.7)) - 0.5;
+	gl_FragColor = vec4(texture2D(src, vu + vec2(m * 0.003, n * 0.0045) * b).rgb, 1.);
+}`, { src: { value: null }, hz: { value: new THREE.Vector3() } })
 
 	mBri = sm(`
 #include <tonemapping_pars_fragment>
@@ -277,6 +290,13 @@ function draw() {
 		mZoom.uniforms.amt.value = ov.zoom
 		pass(mZoom, rtC)
 		src = rtC
+	}
+	if (fx.haze && fx.haze.a > 0.001) {
+		mHaze.uniforms.src.value = src.texture
+		mHaze.uniforms.hz.value.set((fx.haze.y + 1) * 0.5, fx.haze.a, clk)
+		const dst = src === rtC ? rtB : rtC
+		pass(mHaze, dst)
+		src = dst
 	}
 	mBri.uniforms.src.value = src.texture
 	mBri.uniforms.px.value.set((mob ? 2 : 1) / W, (mob ? 2 : 1) / H)
