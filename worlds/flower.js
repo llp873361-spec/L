@@ -547,8 +547,8 @@ void main() {
 		rd.setRenderTarget(wrt)
 		rd.render(wq, wcam)
 		rd.setRenderTarget(null)
-		lx += (-inp.mx * 0.09 - lx) * (1 - Math.exp(-dt * 2))
-		ly += (inp.my * 0.05 - ly) * (1 - Math.exp(-dt * 2))
+		lx += (inp.mx * 0.15 - lx) * (1 - Math.exp(-dt * 4))
+		ly += (inp.my * 0.07 - ly) * (1 - Math.exp(-dt * 4))
 		camera.position.copy(cam0)
 		camera.position.y += Math.sin(t * 0.7) * 0.012
 		const pt = camera.aspect < 1 ? 1.25 + (1 - camera.aspect) * 2.6 : 1.25

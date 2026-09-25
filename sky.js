@@ -569,8 +569,8 @@ export function make(rd, seed) {
 	function update(dt, t, inp) {
 		hv += ((hov ? 1 : 0) - hv) * (1 - Math.exp(-dt * 6))
 		if (!inp.fly) {
-			px += (inp.mx * 0.9 + Math.sin(t * 0.07) * 0.3 - px) * (1 - Math.exp(-dt * 2))
-			py += (inp.my * 0.55 - py) * (1 - Math.exp(-dt * 2))
+			px += (-inp.mx * 1.5 + Math.sin(t * 0.07) * 0.3 - px) * (1 - Math.exp(-dt * 4))
+			py += (-inp.my * 0.9 - py) * (1 - Math.exp(-dt * 4))
 			camera.position.set(px, py, dist(camera.aspect))
 			camera.lookAt(zero)
 		}

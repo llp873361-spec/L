@@ -545,8 +545,9 @@ void main() {
 		u.ut.value = t
 		if (!inp.fly) {
 			if (inp.dx || inp.dy) {
-				camera.rotation.y += inp.dx * 0.0032
-				camera.rotation.x = Math.min(Math.max(camera.rotation.x + inp.dy * 0.0032, -1.35), 1.35)
+				const k = Math.max(Math.tan(camera.fov * Math.PI / 360) * 2 / Math.max(innerHeight, 1), 1.25 / Math.max(innerWidth, 1)) * (inp.ms ? -1 : 1)
+				camera.rotation.y += inp.dx * k
+				camera.rotation.x = Math.min(Math.max(camera.rotation.x + inp.dy * k, -1.35), 1.35)
 				camera.rotation.z = 0
 			}
 			vel = Math.min(Math.max(vel - inp.wh * 0.035, -20), 20) * Math.exp(-dt * 3.5)

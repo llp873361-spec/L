@@ -27,7 +27,7 @@ let ptr = false, pd = null, pin = 0, fail = null, bk = null
 let ft = 1 / 60, fchk = 0, fsw = 0
 const fm = { n: 0, s: 0, avg: 0 }
 const pts = new Map()
-const inp = { mx: 0, my: 0, dx: 0, dy: 0, wh: 0, push: 0, fly: false, hold: false, rm: false }
+const inp = { mx: 0, my: 0, dx: 0, dy: 0, wh: 0, push: 0, fly: false, hold: false, rm: false, ms: false }
 const ov = { zoom: 0, zx: 0, zy: 0, blk: 0, r: -1, w: 0, rim: 0 }
 const tmp = new THREE.Vector3()
 const v2 = new THREE.Vector2()
@@ -589,6 +589,7 @@ function bind() {
 		pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
 		pd = pts.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now(), mv: 0 } : null
 		inp.hold = !tr
+		inp.ms = e.pointerType === 'mouse'
 		if (pts.size === 2) {
 			const [a, b] = [...pts.values()]
 			pin = Math.hypot(a.x - b.x, a.y - b.y)

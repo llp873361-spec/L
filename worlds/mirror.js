@@ -295,8 +295,8 @@ void main() {
 				camera.fov = fv
 				camera.updateProjectionMatrix()
 			}
-			lx += (inp.mx * 0.06 - lx) * (1 - Math.exp(-dt * 1.5))
-			ly += (inp.my * 0.04 - ly) * (1 - Math.exp(-dt * 1.5))
+			lx += (inp.mx * 0.6 - lx) * (1 - Math.exp(-dt * 3))
+			ly += (inp.my * 0.2 - ly) * (1 - Math.exp(-dt * 3))
 			camera.position.set(cam0.x + lx * 0.6, cam0.y + ly * 0.2, cam0.z)
 			camera.lookAt(tgt.x + lx * 6, tgt.y + ly * 5, tgt.z)
 		} else {

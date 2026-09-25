@@ -533,8 +533,8 @@ void main() {
 			camera.position.y += Math.sin(e * Math.PI) * 12
 			look.lerpVectors(L0, L1, e)
 		} else {
-			lx += (-inp.mx * 7 - lx) * (1 - Math.exp(-dt * 2))
-			ly += (inp.my * 3.5 - ly) * (1 - Math.exp(-dt * 2))
+			lx += (inp.mx * 14 - lx) * (1 - Math.exp(-dt * 4))
+			ly += (inp.my * (inp.my > 0 ? 6 : 1.5) - ly) * (1 - Math.exp(-dt * 4))
 			camera.position.copy(P1)
 			look.set(L1.x + lx, L1.y + ly, L1.z)
 		}
