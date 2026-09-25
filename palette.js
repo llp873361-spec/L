@@ -79,56 +79,100 @@ void wlk(inout vec3 c, inout vec3 a, inout vec3 b, vec3 g, vec3 p, vec3 q, float
 		b = q;
 	}
 }
-const vec3 pkk[8] = vec3[8](pk0, pk1, pk2, pk3, pk4, pk5, pk6, pk7);
-const int tdn[8] = int[8](0, 0, 1, 2, 2, 4, 5, 6);
-const int tup[8] = int[8](1, 2, 3, 6, 5, 6, 7, 7);
-const int hdn[8] = int[8](0, 1, 2, 3, 3, 4, 5, 6);
-const int hup[8] = int[8](5, 4, 3, 2, 3, 2, 1, 0);
-int pki(vec3 c) {
-	for (int i = 0; i < 8; i++) {
-		if (distance(c, pkk[i]) < 1e-4) return i;
+float carc(vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec4 st, float v) {
+	float l1 = distance(c0, c1), l2 = distance(c1, c2), l3 = distance(c2, c3);
+	float x = clamp(v, st.x, st.w);
+	return x < st.y ? l1 * (x - st.x) / (st.y - st.x) : x < st.z ? l1 + l2 * (x - st.y) / (st.z - st.y) : l1 + l2 + l3 * (x - st.z) / (st.w - st.z);
+}
+vec3 cpos(vec3 c0, vec3 c1, vec3 c2, vec3 c3, float r, out vec3 a, out vec3 b) {
+	float l1 = distance(c0, c1), l2 = distance(c1, c2), l3 = distance(c2, c3);
+	if (r < l1) {
+		a = c0;
+		b = c1;
+		return mix(c0, c1, max(r, 0.) / max(l1, 1e-5));
 	}
-	return 0;
+	if (r < l1 + l2) {
+		a = c1;
+		b = c2;
+		return mix(c1, c2, (r - l1) / max(l2, 1e-5));
+	}
+	a = c2;
+	b = c3;
+	return mix(c2, c3, min((r - l1 - l2) / max(l3, 1e-5), 1.));
+}
+vec3 fgw(vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec4 st, float v, float ka, vec3 t0, vec3 t1, vec3 t2, vec3 t3, float te, float tg, float f, out vec3 a, out vec3 b) {
+	vec4 ix = vec4(0., 1., 2., 3.);
+	float sv = carc(c0, c1, c2, c3, st, v), sk = carc(c0, c1, c2, c3, ix, ka);
+	vec3 ck = ka < 0.5 ? c0 : ka < 1.5 ? c1 : ka < 2.5 ? c2 : c3;
+	vec3 ce = te < 0.5 ? t0 : te < 1.5 ? t1 : te < 2.5 ? t2 : t3;
+	float we = carc(t0, t1, t2, t3, ix, te), wg = carc(t0, t1, t2, t3, ix, tg);
+	float m0 = abs(sv - sk), m1 = distance(ck, ce);
+	float s = clamp(f, 0., 1.) * (m0 + m1 + abs(wg - we));
+	if (s <= m0) return cpos(c0, c1, c2, c3, sv + sign(sk - sv) * s, a, b);
+	s -= m0;
+	if (s <= m1) {
+		a = ck;
+		b = ce;
+		return mix(ck, ce, s / max(m1, 1e-5));
+	}
+	s -= m1;
+	return cpos(t0, t1, t2, t3, we + sign(wg - we) * s, a, b);
+}
+vec3 pcl(int i) {
+	return i < 4 ? (i < 2 ? (i == 0 ? pk0 : pk1) : (i == 2 ? pk2 : pk3)) : (i < 6 ? (i == 4 ? pk4 : pk5) : (i == 6 ? pk6 : pk7));
+}
+int pnx(int i, bool u) {
+	return u ? (i < 4 ? (i < 2 ? i + 1 : (i == 2 ? 3 : 6)) : (i == 4 ? 5 : i == 5 ? 6 : 7)) : (i < 4 ? (i < 2 ? 0 : i - 1) : (i == 4 ? 2 : i - 1));
+}
+int phh(int i, bool u) {
+	return u ? (i < 4 ? (i < 2 ? 5 - i : 5 - i) : (i == 4 ? 3 : i == 5 ? 2 : 7 - i)) : (i < 4 ? i : i - 1);
+}
+int pki(vec3 c) {
+	float d0 = dot(c - pk0, c - pk0), d1 = dot(c - pk1, c - pk1), d2 = dot(c - pk2, c - pk2), d3 = dot(c - pk3, c - pk3);
+	float d4 = dot(c - pk4, c - pk4), d5 = dot(c - pk5, c - pk5), d6 = dot(c - pk6, c - pk6), d7 = dot(c - pk7, c - pk7);
+	return d0 < 1e-8 ? 0 : d1 < 1e-8 ? 1 : d2 < 1e-8 ? 2 : d3 < 1e-8 ? 3 : d4 < 1e-8 ? 4 : d5 < 1e-8 ? 5 : d6 < 1e-8 ? 6 : d7 < 1e-8 ? 7 : 0;
 }
 void twk(inout vec3 c, inout vec3 a, inout vec3 b, bool u, float f) {
 	if (f <= 0.) return;
 	f = min(f, 1.);
 	int ia = pki(a), ib = pki(b);
-	int ha = u ? hup[ia] : hdn[ia], hb = u ? hup[ib] : hdn[ib];
+	int ha = phh(ia, u), hb = phh(ib, u);
 	int e = hb < ha ? ib : ha < hb ? ia : u ? max(ia, ib) : min(ia, ib);
 	int g = u ? 7 : 0;
-	float l0 = distance(c, pkk[e]);
+	vec3 ce = pcl(e);
+	float l0 = distance(c, ce);
 	float tot = l0;
 	int k = e;
-	for (int s = 0; s < 7; s++) {
+	for (int s = 0; s < 6; s++) {
 		if (k == g) break;
-		int p = u ? tup[k] : tdn[k];
-		tot += distance(pkk[k], pkk[p]);
+		int p = pnx(k, u);
+		tot += distance(pcl(k), pcl(p));
 		k = p;
 	}
 	float r = f * tot;
 	if (r <= l0) {
-		c = mix(c, pkk[e], r / max(l0, 1e-5));
+		c = mix(c, ce, r / max(l0, 1e-5));
 		return;
 	}
 	r -= l0;
 	k = e;
-	for (int s = 0; s < 7; s++) {
+	for (int s = 0; s < 6; s++) {
 		if (k == g) break;
-		int p = u ? tup[k] : tdn[k];
-		float l = distance(pkk[k], pkk[p]);
+		int p = pnx(k, u);
+		vec3 x = pcl(k), y = pcl(p);
+		float l = distance(x, y);
 		if (r <= l) {
-			c = mix(pkk[k], pkk[p], r / max(l, 1e-5));
-			a = pkk[k];
-			b = pkk[p];
+			c = mix(x, y, r / max(l, 1e-5));
+			a = x;
+			b = y;
 			return;
 		}
 		r -= l;
 		k = p;
 	}
-	c = pkk[g];
-	a = pkk[g];
-	b = pkk[g];
+	c = pcl(g);
+	a = c;
+	b = c;
 }
 vec3 dsp(vec3 c) {
 	vec3 a = min(moi * lin3(clamp(c, 0., 1.)), vec3(0.9995));

@@ -61,6 +61,29 @@ canvas {
 	display: none;
 	white-space: pre;
 }
+#back {
+	position: fixed;
+	left: max(16px, env(safe-area-inset-left));
+	bottom: max(16px, env(safe-area-inset-bottom));
+	display: none;
+	padding: 8px 16px;
+	border: 1px solid var(--c3);
+	border-radius: 18px;
+	background: var(--c0);
+	color: var(--c3);
+	font: inherit;
+	font-size: 13px;
+	letter-spacing: .3em;
+	text-indent: .3em;
+	opacity: .72;
+	cursor: pointer;
+	transition: opacity .3s, color .3s, border-color .3s;
+}
+#back:hover {
+	opacity: 1;
+	color: var(--c6);
+	border-color: var(--c6);
+}
 #fb {
 	position: fixed;
 	inset: 0;
@@ -93,6 +116,7 @@ canvas {
 <div id="tip"></div>
 <div id="cnt"></div>
 <div id="fps"></div>
+<button id="back" type="button">回到海洋</button>
 <script type="module">
 import { pal } from './palette.js'
 

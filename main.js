@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { rgb, glsl, nois, v3 } from './palette.js'
 import * as sky from './sky.js'
 import * as ocean from './ocean.js'
+import * as city from './worlds/city.js'
+import * as flower from './worlds/flower.js'
 
 const mob = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
 const rm = matchMedia('(prefers-reduced-motion: reduce)')
@@ -10,17 +12,19 @@ const key = 'fenxing-visit'
 const tip = document.getElementById('tip')
 const cnt = document.getElementById('cnt')
 const fpe = document.getElementById('fps')
+const bkb = document.getElementById('back')
+const wld = { city, flower }
 
 let rd, W = 1, H = 1
 let pr = Math.min(devicePixelRatio || 1, mob ? 1.5 : 2)
 let rtA, rtB, rtC, bl, quad, ocam
 let mLens, mZoom, mBri, mBlur, mFin
 let lay = null, lnm = '', tr = null, run = true, last = 0, clk = 0
-let ptr = false, pd = null, pin = 0, fail = null
+let ptr = false, pd = null, pin = 0, fail = null, bk = null
 let ft = 1 / 60, fchk = 0, fsw = 0
 const fm = { n: 0, s: 0, avg: 0 }
 const pts = new Map()
-const inp = { mx: 0, my: 0, dx: 0, dy: 0, wh: 0, push: 0, fly: false }
+const inp = { mx: 0, my: 0, dx: 0, dy: 0, wh: 0, push: 0, fly: false, hold: false, rm: false }
 const ov = { zoom: 0, zx: 0, zy: 0, blk: 0, r: -1, w: 0, rim: 0 }
 const tmp = new THREE.Vector3()
 const v2 = new THREE.Vector2()
@@ -33,6 +37,14 @@ function rdv() {
 	} catch (e) {
 		console.log('到访记录读不出来，先当作一个都没去过', e)
 		return []
+	}
+}
+
+function wrv() {
+	try {
+		localStorage.setItem(key, JSON.stringify(vis))
+	} catch (e) {
+		console.log('到访记录存不进去，这次只记在内存里', e)
 	}
 }
 
@@ -127,7 +139,7 @@ const vec3 pq[8] = vec3[8](${rgb.map(c => v3(tq(c))).join(', ')});
 const vec3 pc[8] = vec3[8](pk0, pk1, pk2, pk3, pk4, pk5, pk6, pk7);
 uniform sampler2D src, b1, b2;
 uniform vec2 res;
-uniform float bk, blk, ovr;
+uniform float bk, blk, ovr, fla;
 uniform vec4 foc, ovd;
 uniform vec3 hol;
 varying vec2 vu;
@@ -175,12 +187,13 @@ void main() {
 		twk(c, pa, pb, false, smoothstep(ovd.z - e, ovd.z + e, d));
 		twk(c, pa, pb, true, exp(-pow((d - ovd.z) / (e * 2.5 + res.y * 0.01), 2.)) * ovr);
 	}
+	twk(c, pa, pb, true, fla);
 	twk(c, pa, pb, false, blk);
 	c += (hs(vec3(gl_FragCoord.xy, 3.1)) - 0.5) / 255.;
 	gl_FragColor = vec4(c, 1.);
 }`, {
 		src: { value: null }, b1: { value: null }, b2: { value: null },
-		res: { value: new THREE.Vector2() }, bk: { value: 1 }, blk: { value: 0 }, ovr: { value: 0 },
+		res: { value: new THREE.Vector2() }, bk: { value: 1 }, blk: { value: 0 }, ovr: { value: 0 }, fla: { value: 0 },
 		foc: { value: new THREE.Vector4() }, ovd: { value: new THREE.Vector4(0, 0, -1, 0) }, hol: { value: new THREE.Vector3() }
 	})
 }
@@ -219,19 +232,21 @@ function blur(a, b, x, y) {
 
 function draw() {
 	const u = mFin.uniforms
+	const fx = lay && lay.fx || {}
 	u.res.value.set(W, H)
-	u.blk.value = ov.blk
+	u.blk.value = Math.max(ov.blk, fx.fade || 0)
+	u.fla.value = fx.flash || 0
 	u.ovd.value.set(ov.zx, ov.zy, ov.r, ov.w)
 	u.ovr.value = ov.rim
 	if (!lay || (tr && tr.ph === 'still')) {
 		u.src.value = u.b1.value = u.b2.value = bl[3].texture
 		u.bk.value = 0
 		u.blk.value = 1
+		u.fla.value = 0
 		u.foc.value.set(0, 0, 0, 0)
 		pass(mFin, null)
 		return
 	}
-	const fx = lay.fx || {}
 	const cam = lay.camera
 	if (fx.lens) {
 		const l = fx.lens
@@ -281,12 +296,12 @@ function draw() {
 	pass(mFin, null)
 }
 
-function swap(nm) {
+function swap(nm, sd) {
 	if (lay) {
 		lay.dispose()
 		lay = null
 	}
-	lay = nm === 'sky' ? sky.make(rd, 7) : ocean.make(rd, 20260924)
+	lay = nm === 'sky' ? sky.make(rd, 7) : nm === 'ocean' ? ocean.make(rd, 20260924) : wld[nm].make(rd, sd)
 	lnm = nm
 	lay.camera.aspect = innerWidth / innerHeight
 	lay.camera.updateProjectionMatrix()
@@ -294,18 +309,34 @@ function swap(nm) {
 	inp.push = 0
 	fm.n = fm.s = fm.avg = 0
 	fsw = 0
+	if (wld[nm] && !vis.includes(nm)) {
+		vis.push(nm)
+		wrv()
+	}
 	cnt.textContent = `已到访 ${vis.length} / 5`
-	cnt.style.opacity = nm === 'sky' ? 0 : 0.5
-	console.log('切换到', nm)
+	cnt.style.opacity = nm === 'ocean' ? 0.5 : 0
+	console.log('切换到', nm, sd === undefined ? '' : '种子 ' + sd)
+}
+
+function home() {
+	const cam = lay.camera
+	const c = bk.tg.at(clk)
+	cam.fov = bk.f1
+	cam.position.copy(c).addScaledVector(bk.dir, bk.d1)
+	cam.lookAt(c)
+	cam.updateProjectionMatrix()
+	return bk.tg.rad * 4.5 + 3
+}
+
+function back() {
+	if (tr || !bk || !wld[lnm]) return
+	bkb.style.display = 'none'
+	tr = rm.matches ? { ph: 'out', t: 0, nm: 'ocean', ret: true } : { ph: 'close', t: 0 }
 }
 
 function enter(tg, nm) {
 	tip.style.opacity = 0
 	rd.domElement.style.cursor = ''
-	if (rm.matches) {
-		tr = { ph: 'out', t: 0, nm }
-		return
-	}
 	const cam = lay.camera
 	const c = tg.at()
 	const d0 = cam.position.distanceTo(c)
@@ -313,11 +344,16 @@ function enter(tg, nm) {
 	const asp = cam.aspect
 	let d1 = tg.rad * 0.92 / (Math.tan(f1 * Math.PI / 360) * Math.sqrt(1 + asp * asp))
 	d1 = Math.min(Math.max(d1, tg.rad * 1.3), d0 * 0.95)
+	const dir = cam.position.clone().sub(c).normalize()
+	bk = wld[nm] ? { tg, dir, d1, f0: cam.fov, f1 } : null
+	if (rm.matches) {
+		tr = { ph: 'out', t: 0, nm, sd: tg.seed }
+		return
+	}
 	const m = new THREE.Matrix4().lookAt(cam.position, c, cam.up)
 	tr = {
-		ph: 'push', t: 0, nm, tg, d0, d1, f0: cam.fov, f1,
-		q0: cam.quaternion.clone(), q1: new THREE.Quaternion().setFromRotationMatrix(m),
-		dir: cam.position.clone().sub(c).normalize()
+		ph: 'push', t: 0, nm, sd: tg.seed, tg, d0, d1, f0: cam.fov, f1,
+		q0: cam.quaternion.clone(), q1: new THREE.Quaternion().setFromRotationMatrix(m), dir
 	}
 }
 
@@ -350,14 +386,55 @@ function trans(rt) {
 		if (!tr.made) {
 			if (tr.fr++ < 1) return
 			const t0 = performance.now()
-			swap(tr.nm)
+			swap(tr.ret ? 'ocean' : tr.nm, tr.sd)
+			if (tr.ret) tr.dv = home()
 			tr.made = true
 			tr.t = (performance.now() - t0) / 1000
 			console.log('新场景生成用了', Math.round(tr.t * 1000), 'ms')
 		}
 		if (tr.t >= 0.4) {
-			tr.ph = 'open'
+			tr.ph = tr.ret ? 'pull' : wld[lnm] ? 'intro' : 'open'
 			tr.t = 0
+		}
+	} else if (tr.ph === 'intro') {
+		ov.blk = 0
+		if ((tr.t > 0.1 && !(lay.fx && lay.fx.busy)) || tr.t > 9) {
+			tr = null
+			bkb.style.display = 'block'
+		}
+	} else if (tr.ph === 'close') {
+		const u = Math.min(tr.t / 1.1, 1)
+		const k = Math.min((1 - u) / 0.8, 1)
+		ov.zx = W * 0.5
+		ov.zy = H * 0.5
+		ov.r = Math.hypot(W, H) * 0.56 * (1 - Math.pow(1 - k, 3))
+		ov.w = 1 - ss(0.12, 0.95, 1 - u)
+		ov.rim = u
+		if (u >= 1) {
+			ov.r = -1
+			ov.rim = 0
+			tr = { ph: 'still', t: 0, fr: 0, ret: true }
+		}
+	} else if (tr.ph === 'pull') {
+		const cam = lay.camera
+		const u = Math.min(tr.t / 2.5, 1)
+		const e = 1 - Math.pow(1 - u, 2.2)
+		const c = bk.tg.at(clk)
+		cam.position.copy(c).addScaledVector(bk.dir, bk.d1 + (tr.dv - bk.d1) * e)
+		cam.lookAt(c)
+		cam.fov = bk.f1 + (bk.f0 - bk.f1) * e
+		cam.updateProjectionMatrix()
+		cam.updateMatrixWorld()
+		tmp.copy(c).project(cam)
+		ov.zoom = Math.pow(1 - e, 1.4) * 0.5
+		ov.zx = (tmp.x + 1) * 0.5 * W
+		ov.zy = (tmp.y + 1) * 0.5 * H
+		ov.blk = 1 - ss(0, 0.2, u)
+		if (u >= 1) {
+			ov.zoom = 0
+			ov.blk = 0
+			tr = null
+			bk = null
 		}
 	} else if (tr.ph === 'open') {
 		const u = Math.min(tr.t / 1.1, 1)
@@ -376,7 +453,16 @@ function trans(rt) {
 	} else if (tr.ph === 'out') {
 		ov.blk = Math.min(tr.t / 0.6, 1)
 		if (tr.t >= 0.6) {
-			swap(tr.nm)
+			swap(tr.nm, tr.sd)
+			if (tr.ret) {
+				const cam = lay.camera
+				const c = bk.tg.at(clk)
+				cam.position.copy(c).addScaledVector(bk.dir, home())
+				cam.fov = bk.f0
+				cam.lookAt(c)
+				cam.updateProjectionMatrix()
+				bk = null
+			}
 			tr.ph = 'in'
 			tr.t = 0
 		}
@@ -385,6 +471,7 @@ function trans(rt) {
 		if (tr.t >= 0.8) {
 			ov.blk = 0
 			tr = null
+			if (wld[lnm]) bkb.style.display = 'block'
 		}
 	}
 }
@@ -402,7 +489,7 @@ function hover() {
 		rd.domElement.style.cursor = ''
 		return
 	}
-	tip.textContent = lnm === 'ocean' ? (vis.includes(t.kind) ? t.nm : '？') : t.tip
+	tip.textContent = lnm === 'ocean' ? (vis.includes(t.kind) ? t.nm : '？') : t.tip || ''
 	tmp.copy(t.anc).project(lay.camera)
 	tip.style.left = ((tmp.x + 1) * 0.5 * innerWidth).toFixed(1) + 'px'
 	tip.style.top = ((1 - tmp.y) * 0.5 * innerHeight).toFixed(1) + 'px'
@@ -415,6 +502,7 @@ function click() {
 	const t = lay.pick(inp.mx, inp.my, true)
 	if (!t) return
 	if (lnm === 'sky') enter(t, 'ocean')
+	else if (lnm === 'ocean' && wld[t.go]) enter(t, t.go)
 }
 
 function meter(raw) {
@@ -452,7 +540,8 @@ function frame(now) {
 	if (tr) trans(Math.min(raw, 0.05))
 	if (lay && !(tr && tr.ph === 'still')) {
 		clk += dt
-		inp.fly = !!tr && tr.ph === 'push'
+		inp.fly = !!tr && (tr.ph === 'push' || tr.ph === 'pull')
+		inp.rm = rm.matches
 		lay.fx = lay.update(dt, clk, inp) || {}
 		if (!tr) hover()
 	}
@@ -471,6 +560,7 @@ function bind() {
 		cv.setPointerCapture(e.pointerId)
 		pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
 		pd = pts.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now(), mv: 0 } : null
+		inp.hold = !tr
 		if (pts.size === 2) {
 			const [a, b] = [...pts.values()]
 			pin = Math.hypot(a.x - b.x, a.y - b.y)
@@ -503,7 +593,10 @@ function bind() {
 			ndc(e)
 			click()
 		}
-		if (!pts.size) pd = null
+		if (!pts.size) {
+			pd = null
+			inp.hold = false
+		}
 	}
 	cv.addEventListener('pointerup', up)
 	cv.addEventListener('pointercancel', up)
@@ -522,6 +615,10 @@ function bind() {
 		if (fail) fail('显卡那边断开了，刷新一下再看。')
 	})
 	addEventListener('resize', size)
+	bkb.addEventListener('click', back)
+	addEventListener('keydown', e => {
+		if (e.key === 'Escape') back()
+	})
 	document.addEventListener('visibilitychange', () => {
 		if (document.hidden) {
 			run = false

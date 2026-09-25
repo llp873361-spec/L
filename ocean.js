@@ -535,7 +535,7 @@ void main() {
 		const b = best
 		return {
 			kind: b.k, nm: names[b.k], seed: b.seed, idx: b.n, rad: b.s, go: b.k,
-			at: () => ctr(b, t0, new THREE.Vector3()),
+			at: t => ctr(b, t === undefined ? t0 : t, new THREE.Vector3()),
 			anc: ctr(b, t0, new THREE.Vector3()).add(tmp.set(0, b.s * 1.35 + 0.35, 0))
 		}
 	}
@@ -553,7 +553,7 @@ void main() {
 			camera.getWorldDirection(fw)
 			camera.position.addScaledVector(fw, vel * dt)
 			const p = camera.position
-			p.set(Math.min(Math.max(p.x, -62), 62), Math.min(Math.max(p.y, -66), -5), Math.min(Math.max(p.z, -62), 62))
+			p.set(Math.min(Math.max(p.x, -82), 82), Math.min(Math.max(p.y, -70), -3), Math.min(Math.max(p.z, -82), 82))
 		}
 		camera.updateMatrixWorld()
 		bg.position.copy(camera.position)
