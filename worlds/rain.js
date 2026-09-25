@@ -70,6 +70,11 @@ float fgt(vec3 wp, out float tf) {
 	tf = mix(tf, 2.95, lt * 0.85);
 	return 1. - exp(-l / 70.);
 }
+const vec2 dwv = vec2(0.9322, 0.3620);
+float wnd(vec2 p) {
+	float g = 0.5 + 0.5 * sin(dot(p, dwv) * 0.45 - ut * 2.2 + vn(vec3(p * 0.05, ut * 0.08)) * 3.);
+	return 0.3 + 0.2 * sin(ut * 0.4) + 0.85 * g * g * g;
+}
 float rvl(vec2 p) {
 	return rv.w * smoothstep(rv.z * 0.55 - 1., rv.z + 0.5, distance(p, rv.xy));
 }
@@ -230,7 +235,10 @@ void main() {
 		const m = new THREE.ShaderMaterial({
 			uniforms: { ...u, mir: { value: mr } },
 			side: THREE.DoubleSide,
-			transparent: true,
+			blending: mr > 0 ? THREE.NoBlending : THREE.CustomBlending,
+			blendSrc: THREE.SrcAlphaFactor,
+			blendDst: THREE.OneMinusSrcAlphaFactor,
+			alphaToCoverage: mr > 0 && !mob,
 			depthTest: mr > 0,
 			depthWrite: mr > 0,
 			vertexShader: vs,
@@ -302,130 +310,226 @@ void main() {
 		}
 	}
 	{
-		const cap = mob ? 2600 : 7000
-		const rds = []
-		for (const q of isl) {
-			if (q.d >= 75) continue
-			const n = Math.min(Math.round(Math.PI * q.rx * q.rz * (q.d < 30 ? 16 : 9)), 3000)
+		const nli = mob ? 9000 : 30000, nsg = mob ? 2000 : 6000, nst = mob ? 1600 : 5000
+		const lfs = [], sts = []
+		const irad = (q, x, z) => {
+			const dx = x - q.x, dz = z - q.z
+			const ex = (dx * Math.cos(q.ro) + dz * Math.sin(q.ro)) / q.rx, ez = (-dx * Math.sin(q.ro) + dz * Math.cos(q.ro)) / q.rz
+			return Math.hypot(ex, ez) / ie0(q, Math.atan2(ez, ex))
+		}
+		const clump = (x, y, z, big) => {
+			const m = big ? 5 + Math.floor(R() * 6) : 7 + Math.floor(R() * 10)
+			const l0 = big ? 0.55 + R() * 0.9 : 0.18 + R() * 0.35
+			for (let k = 0; k < m; k++) {
+				const az = R() * 6.283
+				lfs.push([x + Math.cos(az) * R() * 0.05, y, z + Math.sin(az) * R() * 0.05, l0 * (0.55 + 0.45 * R()),
+					az, 0.08 + R() * 0.45, big ? 0.5 + R() * 1.5 : 0.4 + R() * 1.2, big ? 0.012 + R() * 0.01 : 0.006 + R() * 0.006,
+					(R() - 0.5) * 2.5, 0.6 + R() * 0.8, R(), R()])
+			}
+			if (big && R() < 0.75) sts.push([x, y, z, 1.1 + R() * 1.1, R() * 6.283, 0.02 + R() * 0.1, 0.5 + R() * 0.6, 0.005 + R() * 0.003, 0.2 + R() * 0.14, 0.035 + R() * 0.025, R(), R()])
+		}
+		const nears = isl.filter(q => q.d < 75)
+		const want = nears.reduce((a, q) => a + Math.PI * q.rx * q.rz * (q.d < 30 ? 28 : 12) * 7.5, 0)
+		const ks = Math.min(1, nli / Math.max(want, 1))
+		for (const q of nears) {
+			const n = Math.round(Math.PI * q.rx * q.rz * (q.d < 30 ? 28 : 12) * ks)
 			for (let k = 0; k < n; k++) {
-				const r = Math.sqrt(R()) * 1.08, th = R() * Math.PI * 2
+				const r = Math.sqrt(R()) * 1.08, th = R() * 6.283
 				const [x, z] = ipt(q, r, th)
-				const y = Math.max(ihg(q, Math.min(r, 1.3), th), 0)
-				const H = (0.9 + 1.2 * (1 - r * r)) * (0.8 + 0.4 * R())
-				rds.push([x, y, z, H, R() * 6.283, 0.05 + R() * 0.3, 0.006 + R() * 0.004, R(), 0.3 + R() * 0.3, R() * 6.283, 0.25 + R() * 0.25, 0.18 + R() * 0.12])
+				clump(x, Math.max(ihg(q, Math.min(r, 1.3), th), 0), z, true)
 			}
 		}
-		while (rds.length > cap) rds.splice(Math.floor(R() * rds.length), 1)
-		rds.sort((a, b) => Math.hypot(b[0], b[2] - 0) - Math.hypot(a[0], a[2]))
-		const nr = rds.length
-		const P = [], K = [], I = []
-		const strip = (part, rows) => {
-			const o = P.length / 3
+		const pc = []
+		for (let k = 0; k < 16; k++) {
+			const r = 2.5 + Math.pow(R(), 0.8) * 17, a = -Math.PI / 2 + (R() - 0.5) * 2
+			pc.push([Math.cos(a) * r, Math.sin(a) * r, 1.2 + R() * 2.8])
+		}
+		const nl0 = lfs.length
+		for (let t = 0; t < 40000 && lfs.length < nl0 + nsg; t++) {
+			const q = pc[Math.floor(R() * pc.length)]
+			const x = q[0] + (R() + R() + R() - 1.5) * q[2], z = q[1] + (R() + R() + R() - 1.5) * q[2]
+			if (z > -1.2 || Math.hypot(x, z) < 1.8 || isl.some(w => irad(w, x, z) < 1.12)) continue
+			clump(x, 0, z, false)
+		}
+		while (sts.length > nst) sts.splice(Math.floor(R() * sts.length), 1)
+		const far = (a, b) => Math.hypot(b[0], b[2]) - Math.hypot(a[0], a[2])
+		const pack = (arr, geo) => {
+			const n = arr.length
+			const a = new Float32Array(n * 4), b = new Float32Array(n * 4), c = new Float32Array(n * 4)
+			arr.forEach((q, i) => {
+				a.set(q.slice(0, 4), i * 4)
+				b.set(q.slice(4, 8), i * 4)
+				c.set(q.slice(8, 12), i * 4)
+			})
+			const g = new THREE.InstancedBufferGeometry()
+			g.setAttribute('position', geo.getAttribute('position'))
+			g.setAttribute('bp', geo.getAttribute('bp'))
+			g.setIndex(geo.getIndex())
+			g.setAttribute('ia', new THREE.InstancedBufferAttribute(a, 4))
+			g.setAttribute('ib', new THREE.InstancedBufferAttribute(b, 4))
+			g.setAttribute('ic', new THREE.InstancedBufferAttribute(c, 4))
+			g.instanceCount = n
+			return g
+		}
+		const strip = rows => {
+			const P = [], B = [], I = []
 			for (let r = 0; r <= rows; r++) {
 				P.push(0, 0, 0, 0, 0, 0)
-				K.push(part, r / rows, -1, part, r / rows, 1)
+				B.push(r, -1, r, 1)
 				if (r) {
-					const b = o + (r - 1) * 2
-					I.push(b, b + 1, b + 3, b, b + 3, b + 2)
+					const o = (r - 1) * 2
+					I.push(o, o + 1, o + 3, o, o + 3, o + 2)
 				}
 			}
+			const g = new THREE.BufferGeometry()
+			g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
+			g.setAttribute('bp', new THREE.Float32BufferAttribute(B, 2))
+			g.setIndex(I)
+			return g
 		}
-		strip(0, 6)
-		strip(1, 5)
-		strip(2, 1)
-		const g = new THREE.InstancedBufferGeometry()
-		g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
-		g.setAttribute('pk', new THREE.Float32BufferAttribute(K, 3))
-		g.setIndex(I)
-		const ra = new Float32Array(nr * 4), rb = new Float32Array(nr * 4), rc = new Float32Array(nr * 4)
-		rds.forEach((q, i) => {
-			ra.set(q.slice(0, 4), i * 4)
-			rb.set(q.slice(4, 8), i * 4)
-			rc.set(q.slice(8, 12), i * 4)
-		})
-		g.setAttribute('ra', new THREE.InstancedBufferAttribute(ra, 4))
-		g.setAttribute('rb', new THREE.InstancedBufferAttribute(rb, 4))
-		g.setAttribute('rc', new THREE.InstancedBufferAttribute(rc, 4))
-		g.instanceCount = nr
-		for (const mr of [-1, 1]) {
-			const [mt, ro] = imat(mr, `${glsl}
+		const lgeo = strip(6), sgeo = strip(13)
+		const nearby = arr => arr.filter(q => Math.hypot(q[0], q[2]) < 30).sort(far)
+		const lvs = `${glsl}
 ${nois}
 ${rg}
-attribute vec3 pk;
-attribute vec4 ra, rb, rc;
+attribute vec2 bp;
+attribute vec4 ia, ib, ic;
 uniform float mir;
 uniform vec2 rs;
-varying vec3 vw, vp;
-varying float vr, vcv, vdx;
-vec3 stm(float t, float L, vec2 dr, float H) {
-	return vec3(dr.x * L * H * t * t * 0.5, H * t * (1. - 0.12 * L * L * t), dr.y * L * H * t * t * 0.5);
+varying vec3 vw, vnr;
+varying vec2 vb;
+varying float vr, vcv;
+vec3 tgl(float s, vec2 dl, float wa) {
+	float th = ib.y + ib.z * s * s;
+	float al = wa * (0.3 + 1.4 * s);
+	vec2 h = dl * sin(th) + dwv * sin(al);
+	return normalize(vec3(h.x, cos(th) * cos(al), h.y));
 }
 void main() {
-	vec3 b = ra.xyz;
-	float H = ra.w;
-	float gu = 0.5 + 0.5 * sin(ut * 0.8 + b.x * 0.13 + b.z * 0.09);
-	float L = rb.y + 0.1 * gu + 0.04 * sin(ut * 2.6 + rb.w * 6.283);
-	vec2 dr = normalize(vec2(cos(rb.x), sin(rb.x)) * 0.6 + vec2(0.93, 0.36) * (0.4 + 0.4 * gu));
-	float wp = 2. / (projectionMatrix[1][1] * rs.y);
-	vec3 p;
+	vec2 dl = vec2(cos(ib.x), sin(ib.x));
+	float wa = wnd(ia.xz) * ic.y * 0.9 + sin(ut * 6.3 + ic.z * 6.283 + ia.x * 0.9 + ia.z * 0.7) * 0.07 * (0.3 + wnd(ia.xz) * ic.y);
+	float uu = bp.x / 6.;
+	vec3 p = ia.xyz + (tgl(0.2113249 * uu, dl, wa) + tgl(0.7886751 * uu, dl, wa)) * 0.5 * uu * ia.w;
+	vec3 tg = tgl(uu, dl, wa);
+	float u = bp.x / 6.;
+	vec3 ac = vec3(-dl.y, 0., dl.x);
+	float tw = ic.x * u;
+	ac = normalize(ac * cos(tw) + cross(tg, ac) * sin(tw));
+	float w = ib.w * (1. - pow(u, 1.7) * 0.93);
+	float dw = max(w, length(p - cameraPosition) * 2.2 / (projectionMatrix[1][1] * rs.y));
 	vcv = 1.;
-	vdx = 0.;
-	if (pk.x < 0.5) {
-		vec3 c = b + stm(pk.y, L, dr, H);
-		vec3 tc = normalize(vec3(cameraPosition.x - c.x, 0., cameraPosition.z - c.z));
-		float w = rb.z * (1. - 0.55 * pk.y);
-		float dw = max(w, length(c - cameraPosition) * wp * 1.1);
-		vcv = w / dw;
-		p = c + vec3(-tc.z, 0., tc.x) * pk.z * dw * 0.5;
-	} else if (pk.x < 1.5) {
-		vec3 a0 = b + stm(rc.x, L, dr, H);
-		vec2 la = vec2(cos(rc.y), sin(rc.y));
-		float t = pk.y, ll = rc.z;
-		vec3 c = a0 + vec3(la.x * ll * t, ll * (0.6 * t - 0.95 * t * t), la.y * ll * t) + vec3(dr.x, 0., dr.y) * L * ll * t * t * 0.5;
-		float w = 0.014 * sin(3.1416 * clamp(t * 0.9 + 0.1, 0., 1.));
-		float dw = max(w, length(c - cameraPosition) * wp * 1.1);
-		vcv = w / max(dw, 1e-5);
-		p = c + normalize(vec3(-la.y, 0.25, la.x)) * pk.z * dw * 0.5;
-	} else {
-		vec3 tip = b + stm(1., L, dr, H);
-		vec3 tc = normalize(vec3(cameraPosition.x - tip.x, 0., cameraPosition.z - tip.z));
-		vec3 ax = vec3(-tc.z, 0., tc.x);
-		float ps = rc.w;
-		vdx = dot(vec3(dr.x, 0., dr.y), ax);
-		p = tip + ax * pk.z * ps * 0.5 + vec3(0., 0.04 - pk.y * ps, 0.);
-	}
-	vp = pk;
+	p += ac * bp.y * dw * 0.5;
+	vnr = normalize(cross(ac, tg));
 	if (mir < 0.) {
 		p.y = -p.y;
-		p.x += sin(ut * 3.1 + p.z * 1.7 + b.x * 2.3) * 0.03 * min(-p.y, 1.);
+		p.x += sin(ut * 3.1 + p.z * 1.7 + ia.x * 2.3) * 0.02 * min(-p.y, 1.);
 	}
 	vw = p;
-	vr = rb.w;
+	vb = vec2(u, bp.y);
+	vr = ic.w;
 	gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.);
-}`, `${glsl}
+}`
+		const lfsh = `${glsl}
 ${nois}
 ${rg}
 uniform float mir;
-varying vec3 vw, vp;
-varying float vr, vcv, vdx;
+varying vec3 vw, vnr;
+varying vec2 vb;
+varying float vr, vcv;
+void main() {
+	float s = vb.x;
+	vec3 V = normalize(vw - cameraPosition);
+	vec3 n = normalize(vnr);
+	if (dot(n, V) > 0.) n = -n;
+	float fs = pow(max(dot(V, ld), 0.), 5.) * (1. - lt);
+	float c = 0.1 + 0.55 * s + 0.2 * vr - 0.05 * (1. - abs(vb.y));
+	c += step(0.82, vr) * smoothstep(0.55, 1., s) * 0.45;
+	c += fs * (0.15 + 1.3 * s * s) + smoothstep(0.55, 1., abs(vb.y)) * fs * (0.25 + 0.7 * s);
+	c += pow(max(dot(reflect(V, n), ld), 0.), 26.) * (0.3 + 0.6 * s) * (1. - lt);
+	c = mix(c, 0.2, lt * 0.8);
+	float a = vcv;
+	if (mir < 0.) {
+		c *= 0.8;
+		a *= 0.8 * (0.1 + 0.9 * pow(1. - abs(V.y), 5.));
+	}
+	float tf;
+	float ff = fgt(vw, tf);
+	c = mix(c, tf, ff);
+	c = mix(c, hzn(atan(V.x, -V.z)), rvl(vw.xz));
+	gl_FragColor = vec4(dsp(rcm(c, smoothstep(0.03, 0.35, fs) * (1. - ff))), a);
+}`
+		const svs = `${glsl}
+${nois}
+${rg}
+attribute vec2 bp;
+attribute vec4 ia, ib, ic;
+uniform float mir;
+uniform vec2 rs;
+varying vec3 vw;
+varying vec2 vb;
+varying float vr, vcv;
+vec3 tgs(float s, vec2 dl, float wa) {
+	float th = ib.y + 0.35 * smoothstep(0.7, 1., s);
+	float al = wa * s * s * 1.8;
+	vec2 h = dl * sin(th) + dwv * sin(al);
+	return normalize(vec3(h.x, cos(th) * cos(al), h.y));
+}
+vec3 tgp(float s, vec2 dl, float wb) {
+	float th = ib.y + 0.35 + 0.9 * s;
+	float al = wb * (1.2 + s);
+	vec2 h = dl * sin(th) + dwv * sin(al);
+	return normalize(vec3(h.x, cos(th) * cos(al), h.y));
+}
+void main() {
+	vec2 dl = vec2(cos(ib.x), sin(ib.x));
+	float w0 = wnd(ia.xz) * ib.z;
+	float nd = sin(ut * 1.7 + ic.z * 6.283 + ia.x * 0.5) * 0.08 * (0.4 + w0);
+	float wa = w0 * 0.55 + nd, wb = w0 * 0.9 + nd * 1.5;
+	vec3 p, tg;
+	if (bp.x < 8.5) {
+		float uu = bp.x / 8.;
+		p = ia.xyz + (tgs(0.2113249 * uu, dl, wa) + tgs(0.7886751 * uu, dl, wa)) * 0.5 * uu * ia.w;
+		tg = tgs(uu, dl, wa);
+	} else {
+		float uu = (bp.x - 8.) / 5.;
+		p = ia.xyz + (tgs(0.2113249, dl, wa) + tgs(0.7886751, dl, wa)) * 0.5 * ia.w;
+		p += (tgp(0.2113249 * uu, dl, wb) + tgp(0.7886751 * uu, dl, wb)) * 0.5 * uu * ic.x;
+		tg = tgp(uu, dl, wb);
+	}
+	vec3 ac = normalize(cross(tg, normalize(cameraPosition - p)));
+	float w = bp.x < 8.5 ? ib.w * (1. - 0.45 * bp.x / 8.) : ic.y * pow(sin(3.1416 * clamp((bp.x - 8.) / 5., 0., 1.)), 0.6);
+	float dw = max(w, length(p - cameraPosition) * 2.2 / (projectionMatrix[1][1] * rs.y));
+	vcv = 1.;
+	p += ac * bp.y * dw * 0.5;
+	if (mir < 0.) {
+		p.y = -p.y;
+		p.x += sin(ut * 3.1 + p.z * 1.7 + ia.x * 2.3) * 0.02 * min(-p.y, 1.);
+	}
+	vw = p;
+	vb = vec2(bp.x / 8., bp.y);
+	vr = ic.w;
+	gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.);
+}`
+		const sfs = `${glsl}
+${nois}
+${rg}
+uniform float mir;
+varying vec3 vw;
+varying vec2 vb;
+varying float vr, vcv;
 void main() {
 	vec3 V = normalize(vw - cameraPosition);
 	float fs = pow(max(dot(V, ld), 0.), 5.) * (1. - lt);
 	float c, a = vcv;
-	if (vp.x < 1.5) {
-		float t = vp.x < 0.5 ? vp.y : 0.3 + 0.4 * vp.y;
-		c = 0.12 + 0.55 * t + 0.2 * vr;
-		c += fs * (0.2 + 1.1 * t) + smoothstep(0.6, 1., abs(vp.z)) * fs * 0.6;
+	if (vb.x > 1.01) {
+		float q = (vb.x - 1.) * 1.6;
+		float fb = vn(vec3(vb.y * 6., q * 40. + vr * 30., 2.));
+		float m = smoothstep(0.25, 0.6, fb + 0.35 - abs(vb.y) * 0.5);
+		if (m < 0.1) discard;
+		a *= m;
+		c = 1. + 0.35 * fb + fs * 1.7;
 	} else {
-		float qy = vp.y, qx = vp.z;
-		float xc = vdx * qy * qy * 0.5;
-		float wd = 0.06 + 0.2 * pow(sin(3.1416 * clamp(qy * 1.05, 0., 1.)), 0.7);
-		float fb = vn(vec3(qx * 14., qy * 34. + vr * 40., 1.));
-		float e = wd * (0.55 + 0.45 * fb);
-		float m = (1. - smoothstep(e, e + 0.12, abs(qx - xc))) * smoothstep(0., 0.08, qy) * (1. - smoothstep(0.85, 1., qy));
-		if (m < 0.25) discard;
-		a = smoothstep(0.25, 0.7, m) * 0.95;
-		c = 1.05 + 0.3 * fb + fs * 1.6;
+		c = 0.18 + 0.45 * vb.x + 0.1 * vr + fs * 0.5;
 	}
 	c = mix(c, 0.25, lt * 0.8);
 	if (mir < 0.) {
@@ -437,12 +541,19 @@ void main() {
 	c = mix(c, tf, ff);
 	c = mix(c, hzn(atan(V.x, -V.z)), rvl(vw.xz));
 	gl_FragColor = vec4(dsp(rcm(c, smoothstep(0.03, 0.35, fs) * (1. - ff))), a);
-}`, 1.5)
-			const m = new THREE.Mesh(g, mt)
-			m.frustumCulled = false
-			m.renderOrder = ro
-			scene.add(m)
+}`
+		for (const mr of [-1, 1]) {
+			for (const [arr, geo, vs, fs, ro] of [[lfs, lgeo, lvs, lfsh, 1.5], [sts, sgeo, svs, sfs, 1.6]]) {
+				const src = mr > 0 ? arr.slice().sort((a, b) => -far(a, b)) : nearby(arr)
+				if (!src.length) continue
+				const [mt, rr] = imat(mr, vs, fs, ro)
+				const m = new THREE.Mesh(pack(src, geo), mt)
+				m.frustumCulled = false
+				m.renderOrder = rr
+				scene.add(m)
+			}
 		}
+		console.log('雨汀植被', lfs.length, '片叶子', sts.length, '根花茎')
 	}
 	{
 		const M = 72, P = [], B = [], I = []
@@ -488,7 +599,7 @@ uniform float mir;
 varying vec3 vw;
 varying vec2 vb;
 void main() {
-	float top = 0.72 + 0.18 * vn(vec3(vb.x * 0.35, 1., 3.)) + 0.1 * vn(vec3(vb.x * 1.9, 2., 5.));
+	float top = 0.72 + 0.18 * vn(vec3(vb.x * 0.35, 1., 3.)) + 0.1 * vn(vec3(vb.x * 1.9 - ut * 1.3, 2., 5.));
 	float st = vn(vec3(vb.x * 26., 3., 1.));
 	float m = 1. - smoothstep(top - 0.05, top + 0.03 + 0.1 * st, vb.y);
 	if (m < 0.2) discard;
@@ -512,121 +623,6 @@ void main() {
 				m.renderOrder = ro
 				scene.add(m)
 			}
-		}
-	}
-
-	{
-		const nb = mob ? 700 : 1800
-		const P = [], G = [], I = []
-		for (let r = 0; r <= 5; r++) {
-			P.push(0, 0, 0, 0, 0, 0)
-			G.push(r / 5, -1, r / 5, 1)
-			if (r) {
-				const o = (r - 1) * 2
-				I.push(o, o + 1, o + 3, o, o + 3, o + 2)
-			}
-		}
-		const g = new THREE.InstancedBufferGeometry()
-		g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
-		g.setAttribute('gp', new THREE.Float32BufferAttribute(G, 2))
-		g.setIndex(I)
-		const ga2 = new Float32Array(nb * 4), gb = new Float32Array(nb * 4)
-		const pc = []
-		for (let k = 0; k < 16; k++) {
-			const r = 2.5 + Math.pow(R(), 0.8) * 17, a = -Math.PI / 2 + (R() - 0.5) * 2
-			pc.push([Math.cos(a) * r, Math.sin(a) * r, 1.2 + R() * 2.8])
-		}
-		let i = 0
-		while (i < nb) {
-			const q = pc[Math.floor(R() * pc.length)]
-			const cx = q[0] + (R() + R() + R() - 1.5) * q[2], cz = q[1] + (R() + R() + R() - 1.5) * q[2]
-			if (cz > -1.2 || Math.hypot(cx, cz) < 1.8) continue
-			const m = 6 + Math.floor(R() * 10), hm = 0.2 + R() * 0.32
-			for (let k = 0; k < m && i < nb; k++, i++) {
-				const ph = R() * 6.283
-				ga2.set([cx + Math.cos(ph) * R() * 0.06, cz + Math.sin(ph) * R() * 0.06, hm * (0.5 + 0.5 * R()), ph], i * 4)
-				gb.set([0.008 + R() * 0.01, 0.1 + R() * 0.75, R(), R()], i * 4)
-			}
-		}
-		g.setAttribute('ga', new THREE.InstancedBufferAttribute(ga2, 4))
-		g.setAttribute('gb', new THREE.InstancedBufferAttribute(gb, 4))
-		g.instanceCount = nb
-		for (const mr of [-1, 1]) {
-			const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
-				uniforms: { ...u, mir: { value: mr } },
-				side: THREE.DoubleSide,
-				transparent: true,
-				depthTest: mr > 0,
-				depthWrite: mr > 0,
-				vertexShader: `${glsl}
-${nois}
-${rg}
-attribute vec2 gp;
-attribute vec4 ga, gb;
-uniform float mir;
-uniform vec2 rs;
-varying vec3 vw, vnr;
-varying vec2 vg;
-varying float vr, vcv;
-void main() {
-	float t = gp.x;
-	vec2 dr = vec2(cos(ga.w), sin(ga.w));
-	float L = gb.y + sin(ut * 1.1 + ga.x * 0.7 + ga.y * 0.5) * 0.06 + sin(ut * 2.3 + gb.z * 6.283) * 0.025;
-	float H = ga.z;
-	float x = L * H * t * t * 0.9;
-	vec3 c = vec3(ga.x + dr.x * x, H * t * (1. - 0.32 * L * L * t), ga.y + dr.y * x);
-	vec3 tg = normalize(vec3(dr.x * L * 1.8 * t, 1. - 0.64 * L * L * t, dr.y * L * 1.8 * t));
-	vec3 ac = vec3(-dr.y, 0., dr.x);
-	float tw = (gb.w - 0.5) * 1.4 * t;
-	ac = normalize(ac * cos(tw) + cross(tg, ac) * sin(tw));
-	float w = gb.x * (1. - pow(t, 1.6) * 0.92);
-	float wp = length(c - cameraPosition) * 2. / (projectionMatrix[1][1] * rs.y);
-	float dw = max(w, wp * 1.2);
-	vcv = w / dw;
-	vec3 p = c + ac * gp.y * dw * 0.5;
-	if (mir < 0.) {
-		p.y = -p.y;
-		p.x += sin(ut * 3.1 + p.z * 4. + ga.x * 9.) * 0.01 * t;
-	}
-	vw = p;
-	vnr = normalize(cross(ac, tg));
-	vg = gp;
-	vr = gb.z;
-	gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.);
-}`,
-				fragmentShader: `${glsl}
-${nois}
-${rg}
-uniform float mir;
-varying vec3 vw, vnr;
-varying vec2 vg;
-varying float vr, vcv;
-void main() {
-	float t = vg.x;
-	vec3 V = normalize(vw - cameraPosition);
-	vec3 n = normalize(vnr);
-	if (dot(n, V) > 0.) n = -n;
-	float fs = pow(max(dot(V, ld), 0.), 5.) * (1. - lt);
-	float c = 0.08 + 0.4 * t * t + 0.15 * vr - 0.06 * (1. - abs(vg.y));
-	c += fs * (0.15 + 1.5 * t * t * t);
-	c += smoothstep(0.6, 1., abs(vg.y)) * fs * (0.3 + 0.8 * t);
-	c += pow(max(dot(reflect(V, n), ld), 0.), 28.) * (0.3 + 0.7 * t) * (1. - lt);
-	c = mix(c, 0.2, lt * 0.8);
-	float a = vcv;
-	if (mir < 0.) {
-		c *= 0.8;
-		a *= 0.8 * (0.1 + 0.9 * pow(1. - abs(V.y), 5.));
-	}
-	float tf;
-	float ff = fgt(vw, tf);
-	c = mix(c, tf, ff);
-	c = mix(c, hzn(atan(V.x, -V.z)), rvl(vw.xz));
-	gl_FragColor = vec4(dsp(rcm(c, smoothstep(0.03, 0.35, fs) * (1. - ff))), a);
-}`
-			}))
-			m.frustumCulled = false
-			m.renderOrder = mr > 0 ? 2.5 : 1.5
-			scene.add(m)
 		}
 	}
 
