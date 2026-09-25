@@ -56,6 +56,8 @@ float sky(vec3 d) {
 	t += gp * 1.9 + pow(max(dot(d, ld), 0.), 60.) * 0.5 + pow(max(dot(d, ld), 0.), 6.) * 0.3;
 	float sh = (1. - smoothstep(0.004, 0.007 + 0.004 * vn(vec3(az * 9., 2., 5.)), el)) * step(-0.002, el);
 	t = mix(t, hzn(az) - 0.45, sh * 0.8);
+	float rn = vn(vec3((az + el * 0.12) * 380., el * 8. + ut * 6., 3.));
+	t += smoothstep(0.55, 0.95, rn) * (1. - smoothstep(0.02, 0.16, h)) * smoothstep(-0.005, 0.01, el) * (0.05 + 0.3 * pow(max(dot(d, ld), 0.), 3.));
 	t = mix(t, 3.02 + 0.3 * pow(max(dot(d, ld), 0.), 4.), lt * 0.9);
 	float tr = tre(az, el);
 	t = mix(t, mix(hzn(az) - 0.6, 0.35, lt), tr);
@@ -217,65 +219,167 @@ void main() {
 	}
 
 	{
-		const nb = mob ? 350 : 900
-		const P = [], K = []
-		P.push(-0.5, 0, 0, 0.5, 0, 0, -0.3, 0.5, 0, 0.3, 0.5, 0, 0, 1, 0)
-		K.push(0, 0, 0.5, 0.5, 1)
+		const nb = mob ? 700 : 1800
+		const P = [], G = [], I = []
+		for (let r = 0; r <= 5; r++) {
+			P.push(0, 0, 0, 0, 0, 0)
+			G.push(r / 5, -1, r / 5, 1)
+			if (r) {
+				const o = (r - 1) * 2
+				I.push(o, o + 1, o + 3, o, o + 3, o + 2)
+			}
+		}
 		const g = new THREE.InstancedBufferGeometry()
 		g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
-		g.setAttribute('kh', new THREE.Float32BufferAttribute(K, 1))
-		g.setIndex([0, 1, 3, 0, 3, 2, 2, 3, 4])
+		g.setAttribute('gp', new THREE.Float32BufferAttribute(G, 2))
+		g.setIndex(I)
 		const ga2 = new Float32Array(nb * 4), gb = new Float32Array(nb * 4)
+		const pc = []
+		for (let k = 0; k < 16; k++) {
+			const r = 2.5 + Math.pow(R(), 0.8) * 17, a = -Math.PI / 2 + (R() - 0.5) * 2
+			pc.push([Math.cos(a) * r, Math.sin(a) * r, 1.2 + R() * 2.8])
+		}
 		let i = 0
 		while (i < nb) {
-			const r = 1.6 + Math.pow(R(), 0.7) * 18, a = -Math.PI / 2 + (R() - 0.5) * 2.2
-			const cx = Math.cos(a) * r, cz = Math.sin(a) * r
-			const m = 5 + Math.floor(R() * 9)
+			const q = pc[Math.floor(R() * pc.length)]
+			const cx = q[0] + (R() + R() + R() - 1.5) * q[2], cz = q[1] + (R() + R() + R() - 1.5) * q[2]
+			if (cz > -1.2 || Math.hypot(cx, cz) < 1.8) continue
+			const m = 6 + Math.floor(R() * 10), hm = 0.2 + R() * 0.32
 			for (let k = 0; k < m && i < nb; k++, i++) {
-				ga2.set([cx + (R() - 0.5) * 0.5, cz + (R() - 0.5) * 0.5, 0.1 + R() * 0.38, R() * 6.283], i * 4)
-				gb.set([0.006 + R() * 0.006, (R() - 0.5) * 0.5, R(), R()], i * 4)
+				const ph = R() * 6.283
+				ga2.set([cx + Math.cos(ph) * R() * 0.06, cz + Math.sin(ph) * R() * 0.06, hm * (0.5 + 0.5 * R()), ph], i * 4)
+				gb.set([0.008 + R() * 0.01, 0.1 + R() * 0.75, R(), R()], i * 4)
 			}
 		}
 		g.setAttribute('ga', new THREE.InstancedBufferAttribute(ga2, 4))
 		g.setAttribute('gb', new THREE.InstancedBufferAttribute(gb, 4))
 		g.instanceCount = nb
-		const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
+		for (const mr of [-1, 1]) {
+			const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
+				uniforms: { ...u, mir: { value: mr } },
+				side: THREE.DoubleSide,
+				transparent: true,
+				depthTest: mr > 0,
+				depthWrite: mr > 0,
+				vertexShader: `${glsl}
+${nois}
+${rg}
+attribute vec2 gp;
+attribute vec4 ga, gb;
+uniform float mir;
+uniform vec2 rs;
+varying vec3 vw, vnr;
+varying vec2 vg;
+varying float vr, vcv;
+void main() {
+	float t = gp.x;
+	vec2 dr = vec2(cos(ga.w), sin(ga.w));
+	float L = gb.y + sin(ut * 1.1 + ga.x * 0.7 + ga.y * 0.5) * 0.06 + sin(ut * 2.3 + gb.z * 6.283) * 0.025;
+	float H = ga.z;
+	float x = L * H * t * t * 0.9;
+	vec3 c = vec3(ga.x + dr.x * x, H * t * (1. - 0.32 * L * L * t), ga.y + dr.y * x);
+	vec3 tg = normalize(vec3(dr.x * L * 1.8 * t, 1. - 0.64 * L * L * t, dr.y * L * 1.8 * t));
+	vec3 ac = vec3(-dr.y, 0., dr.x);
+	float tw = (gb.w - 0.5) * 1.4 * t;
+	ac = normalize(ac * cos(tw) + cross(tg, ac) * sin(tw));
+	float w = gb.x * (1. - pow(t, 1.6) * 0.92);
+	float wp = length(c - cameraPosition) * 2. / (projectionMatrix[1][1] * rs.y);
+	float dw = max(w, wp * 1.2);
+	vcv = w / dw;
+	vec3 p = c + ac * gp.y * dw * 0.5;
+	if (mir < 0.) {
+		p.y = -p.y;
+		p.x += sin(ut * 3.1 + p.z * 4. + ga.x * 9.) * 0.01 * t;
+	}
+	vw = p;
+	vnr = normalize(cross(ac, tg));
+	vg = gp;
+	vr = gb.z;
+	gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.);
+}`,
+				fragmentShader: `${glsl}
+${nois}
+${rg}
+uniform float mir;
+varying vec3 vw, vnr;
+varying vec2 vg;
+varying float vr, vcv;
+void main() {
+	float t = vg.x;
+	vec3 V = normalize(vw - cameraPosition);
+	vec3 n = normalize(vnr);
+	if (dot(n, V) > 0.) n = -n;
+	float fs = pow(max(dot(V, ld), 0.), 5.) * (1. - lt);
+	float c = 0.08 + 0.4 * t * t + 0.15 * vr - 0.06 * (1. - abs(vg.y));
+	c += fs * (0.15 + 1.5 * t * t * t);
+	c += smoothstep(0.6, 1., abs(vg.y)) * fs * (0.3 + 0.8 * t);
+	c += pow(max(dot(reflect(V, n), ld), 0.), 28.) * (0.3 + 0.7 * t) * (1. - lt);
+	c = mix(c, 0.2, lt * 0.8);
+	float a = vcv;
+	if (mir < 0.) {
+		c *= 0.8;
+		a *= 0.8 * (0.1 + 0.9 * pow(1. - abs(V.y), 5.));
+	}
+	float tf;
+	float ff = fgt(vw, tf);
+	c = mix(c, tf, ff);
+	c = mix(c, hzn(atan(V.x, -V.z)), rvl(vw.xz));
+	gl_FragColor = vec4(dsp(rch(c)), a);
+}`
+			}))
+			m.frustumCulled = false
+			m.renderOrder = mr > 0 ? 2 : 1
+			scene.add(m)
+		}
+	}
+
+	{
+		const P = []
+		for (let z = -18; z <= -2; z++) for (let x = -12; x <= 11; x++) for (let k = 0; k < 3; k++) P.push(x, k, z)
+		const g = new THREE.BufferGeometry()
+		g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
+		const m = new THREE.Points(g, new THREE.ShaderMaterial({
 			uniforms: u,
-			side: THREE.DoubleSide,
+			transparent: true,
+			depthWrite: false,
 			vertexShader: `${glsl}
 ${nois}
 ${rg}
-attribute float kh;
-attribute vec4 ga, gb;
-varying vec3 vw;
-varying float vk, vr;
+uniform vec2 rs;
+uniform float pr;
+varying float va, vt;
 void main() {
-	vec3 b = vec3(ga.x, 0., ga.y);
-	vec3 tc = normalize(vec3(cameraPosition.x - b.x, 0., cameraPosition.z - b.z));
-	vec3 sd = vec3(-tc.z, 0., tc.x);
-	float h = position.y * ga.z;
-	float lean = gb.y + sin(ut * 1.3 + ga.w) * 0.03;
-	vw = b + sd * (position.x * gb.x * 2. + lean * h * h) + vec3(0., h, 0.);
-	vk = kh;
-	vr = gb.z;
-	gl_Position = projectionMatrix * viewMatrix * vec4(vw, 1.);
+	vec2 id = position.xz;
+	float k = position.y;
+	float T = 1. + 0.7 * hs(id + 4.1);
+	float tau = mod(ut + hs(id) * 13.7, T);
+	vec2 c = (id + 0.15 + 0.7 * vec2(hs(id + 1.3), hs(id + 2.7))) * 0.62;
+	float th = hs(id + k * 3.3 + 0.7) * 6.283;
+	float vh = 0.2 + 0.3 * hs(id + k * 1.9 + 7.);
+	float vv = 0.8 + 0.7 * hs(id + k * 2.6 + 11.);
+	vec3 p = vec3(c.x + cos(th) * vh * tau, vv * tau - 4.9 * tau * tau, c.y + sin(th) * vh * tau);
+	vec4 mv = viewMatrix * vec4(p, 1.);
+	gl_Position = projectionMatrix * mv;
+	float d = -mv.z;
+	float s = 0.004 * projectionMatrix[1][1] * rs.y * 0.5 / max(d, 0.1);
+	gl_PointSize = max(s, 1.5 * pr);
+	float fs = pow(max(dot(normalize(p - cameraPosition), ld), 0.), 4.);
+	va = step(0., p.y) * (1. - smoothstep(0.08, 0.22, tau)) * min(s / (1.5 * pr), 1.) * (0.35 + 0.65 * fs) * (1. - lt) * (1. - rvl(p.xz));
+	vt = 2.5 + 1.4 * fs;
 }`,
 			fragmentShader: `${glsl}
 ${nois}
 ${rg}
-varying vec3 vw;
-varying float vk, vr;
+varying float va, vt;
 void main() {
-	float t = 0.25 + 0.35 * vk + 0.2 * vr;
-	t += pow(max(dot(normalize(vw - cameraPosition), ld), 0.), 20.) * 0.6 * vk;
-	float tf;
-	float ff = fgt(vw, tf);
-	t = mix(t, tf, ff);
-	t = mix(t, hzn(atan(vw.x - cameraPosition.x, cameraPosition.z - vw.z)), rvl(vw.xz));
-	gl_FragColor = vec4(dsp(rch(t)), 1.);
+	vec2 q = gl_PointCoord * 2. - 1.;
+	float r = dot(q, q);
+	if (r > 1. || va < 0.01) discard;
+	gl_FragColor = vec4(dsp(rch(vt)), va * exp(-r * 2.5));
 }`
 		}))
 		m.frustumCulled = false
+		m.renderOrder = 3
 		scene.add(m)
 	}
 
@@ -289,7 +393,7 @@ void main() {
 		const ra = new Float32Array(nr * 4), rb = new Float32Array(nr * 4)
 		for (let i = 0; i < nr; i++) {
 			ra.set([R() * bx.x, R() * bx.y, R() * bx.z, 7.5 + R() * 2.5], i * 4)
-			rb.set([0.22 + R() * 0.3, R(), R(), 0.7 + R() * 0.6], i * 4)
+			rb.set([0.12 + R() * 0.16, R(), R(), 0.8 + R() * 0.4], i * 4)
 		}
 		g.setAttribute('ra', new THREE.InstancedBufferAttribute(ra, 4))
 		g.setAttribute('rb', new THREE.InstancedBufferAttribute(rb, 4))
@@ -308,9 +412,9 @@ uniform float pr;
 varying float vt, va;
 varying vec2 vq;
 void main() {
-	vec3 wd = normalize(vec3(0.9, -ra.w, 0.35));
+	vec3 wd = normalize(vec3(0.9 + 0.6 * sin(ut * 0.4), -ra.w, 0.35 + 0.3 * sin(ut * 0.27 + 1.)));
 	vec3 o = vec3(cameraPosition.x - ${f4(bx.x / 2)}, 0., cameraPosition.z - ${f4(bx.z - 6)});
-	vec3 q = ra.xyz + vec3(0.9, -ra.w, 0.35) * ut;
+	vec3 q = ra.xyz + vec3(0.9 * ut - 1.5 * cos(ut * 0.4), -ra.w * ut, 0.35 * ut - 1.111 * cos(ut * 0.27 + 1.));
 	q = mod(q, vec3(${f4(bx.x)}, ${f4(bx.y)}, ${f4(bx.z)}));
 	vec3 p1 = o + q;
 	vec3 p0 = p1 - wd * rb.x;
@@ -329,15 +433,17 @@ void main() {
 	vec2 dr = ln > 0.001 ? dd / ln : vec2(0., 1.);
 	vec2 nm = vec2(-dr.y, dr.x);
 	float dist = length(p1 - cameraPosition);
-	float w = rb.w * pr * mix(1.6, 0.9, smoothstep(2., 12., dist));
-	vec2 sp = mix(s0, s1, cn.x) + nm * cn.y * w * 0.5;
+	float tw = 0.0022 * rb.w * projectionMatrix[1][1] * rs.y * 0.5 / dist;
+	float df = 1. + 2.5 * (1. - smoothstep(0.7, 2.6, dist));
+	float dw = max(tw * df, 1.4 * pr);
+	float cov = min(tw / dw * 1.6, 1.);
+	vec2 sp = mix(s0 - dr * dw * 0.5, s1 + dr * dw * 0.5, cn.x) + nm * cn.y * dw;
 	vec4 cp = mix(c0, c1, cn.x);
 	gl_Position = vec4(sp / (rs * 0.5) * cp.w, cp.z, cp.w);
-	vec3 vd = normalize(p1 - cameraPosition);
-	float fs = pow(max(dot(vd, ld), 0.), 6.);
-	float I = (0.3 + 1.7 * fs) * exp(-dist / 16.) * (0.6 + 0.4 * rb.y);
-	vt = mix(2.05 + 1.9 * min(I, 1.), 0.5, lt);
-	va = mix(clamp(I * 1.15, 0., 0.85), 0.75 * exp(-dist / 24.), lt) * smoothstep(0., 0.4, q.y) * smoothstep(0.8, 2.5, dist);
+	float fs = pow(max(dot(normalize(p1 - cameraPosition), ld), 0.), 6.);
+	float I = (0.22 + 1.6 * fs) * exp(-dist / 18.) * (0.55 + 0.45 * rb.y);
+	vt = mix(2.1 + 1.8 * min(I, 1.), 0.5, lt);
+	va = mix(clamp(I, 0., 0.9), 0.6 * exp(-dist / 24.), lt) * cov * smoothstep(0., 0.3, q.y) * smoothstep(0.45, 1.2, dist);
 }`,
 			fragmentShader: `${glsl}
 ${nois}
@@ -345,13 +451,13 @@ ${rg}
 varying float vt, va;
 varying vec2 vq;
 void main() {
-	float a = va * (1. - vq.y * vq.y) * mix(0.35, 1., vq.x);
-	if (a < 0.004) discard;
+	float a = va * exp(-vq.y * vq.y * 4.5) * smoothstep(0., 0.3, vq.x) * (1. - smoothstep(0.7, 1., vq.x));
+	if (a < 0.003) discard;
 	gl_FragColor = vec4(dsp(rch(vt)), a);
 }`
 		}))
 		m.frustumCulled = false
-		m.renderOrder = 2
+		m.renderOrder = 4
 		scene.add(m)
 	}
 
