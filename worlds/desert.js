@@ -44,13 +44,14 @@ float sky(vec3 d) {
 
 const tgl = k => `
 const uint sdv = ${k.sdv}u;
-const vec2 w1 = vec2(${fl(k.w1.x)}, ${fl(k.w1.y)}), w2 = vec2(${fl(k.w2.x)}, ${fl(k.w2.y)});
+const vec2 w1 = vec2(${fl(k.w1.x)}, ${fl(k.w1.y)}), w2 = vec2(${fl(k.w2.x)}, ${fl(k.w2.y)}), c1 = vec2(${fl(-k.w1.y)}, ${fl(k.w1.x)});
 const vec2 co = vec2(${fl(k.cx)}, ${fl(k.cz)});
 const float L1 = ${fl(k.l1)}, H1 = ${fl(k.h1)}, LA1 = ${fl(k.la1)}, LB1 = ${fl(k.lb1)};
-const float L2 = ${fl(k.l2)}, H2 = ${fl(k.h2)}, LA2 = ${fl(k.la2)}, LB2 = ${fl(k.lb2)}, TR = ${fl(k.tr)};
+const float L2 = ${fl(k.l2)}, H2 = ${fl(k.h2)}, LA2 = ${fl(k.la2)}, LB2 = ${fl(k.lb2)};
 const float AW1 = ${fl(k.aw1)}, F1 = ${fl(k.f1)}, AW2 = ${fl(k.aw2)}, F2 = ${fl(k.f2)}, AW3 = ${fl(k.aw3)}, F3 = ${fl(k.f3)}, AW4 = ${fl(k.aw4)}, F4 = ${fl(k.f4)};
-const float FA1 = ${fl(k.fa1)}, FA2 = ${fl(k.fa2)}, HD = ${fl(k.hd)}, FD = ${fl(k.fd)}, HM = ${fl(k.hm)}, FM = ${fl(k.fm)};
-const float R0 = ${fl(k.r0)}, LNR = ${fl(k.lnr)}, RK = ${fl(k.rk)}, HMX = ${fl(k.hmx)};
+const float FAC = ${fl(k.fac)}, FAW = ${fl(k.faw)}, FA2 = ${fl(k.fa2)}, HD = ${fl(k.hd)}, FD = ${fl(k.fd)}, HM = ${fl(k.hm)}, FM = ${fl(k.fm)};
+const float GH = ${fl(k.gh)}, GU = ${fl(k.gu)}, GS = ${fl(k.gs)}, GV = ${fl(k.gv)};
+const float R0 = ${fl(k.r0)}, LNR = ${fl(k.lnr)}, HMX = ${fl(k.hmx)};
 float hh(ivec2 q, uint s) {
 	uint h = uint(q.x) * 374761393u + uint(q.y) * 668265263u + sdv + s * 2246822519u;
 	h = (h ^ (h >> 13u)) * 1274126177u;
@@ -64,35 +65,37 @@ vec3 vnd(vec2 p, uint s) {
 	float e = a - b - c + d;
 	return vec3(a + (b - a) * u.x + (c - a) * u.y + e * u.x * u.y, du * vec2(b - a + e * u.y, c - a + e * u.x));
 }
-float prf(float x, float la, float lb, float ro) {
-	float yl = 1. - x / la;
-	float hl = (yl > TR ? yl - TR * 0.5 : yl > 0. ? yl * yl / (2. * TR) : 0.) / (1. - TR * 0.5);
-	float t = max((x - lb) / (1. - lb), 0.);
-	float p = max(hl, t * t * (2. - t));
-	if (ro > 0.) {
-		float d = x < 0.5 ? x : x - 1.;
-		float m = max(ro - abs(d), 0.);
-		p -= (1. / (1. - lb) + 1. / (la * (1. - TR * 0.5))) * m * m / (4. * ro);
-	}
-	return p;
+float bmp(float x, float la, float lb, out float dp) {
+	bool lee = x < (la + lb) * 0.5;
+	float k = lee ? 1. / la : 1. / (1. - lb);
+	float s = lee ? x * k : (x - 1.) * k;
+	float q = max(1. - s * s, 0.);
+	dp = -4. * s * q * k;
+	return q * q;
 }
 float msk(float x) {
-	return smoothstep(LA1 + 0.02, LA1 + 0.14, x) * (1. - smoothstep(0.9, 0.985, x));
+	return smoothstep(LA1 * 0.7, LA1 * 1.05, x) * (1. - smoothstep(0.88, 0.98, x));
 }
-float ter(vec2 p, float ro, out vec4 g0, out vec4 g1, out vec4 g2, out vec4 g3) {
+float ter(vec2 p, out vec4 g0, out vec4 g1, out vec4 g2, out vec4 g3) {
 	vec3 a = vnd(p * F1 + vec2(3.7, 1.3), 1u), b = vnd(p * F2 + vec2(5.1, 8.9), 2u), c = vnd(p * F3 + vec2(6.3, 2.4), 3u), h = vnd(p * F4 + vec2(0.6, 4.8), 14u);
 	float p1 = (dot(p, w1) + AW1 * (a.x - 0.5) + AW2 * (b.x - 0.5) + AW4 * (h.x - 0.5)) / L1;
 	float p2 = (dot(p, w2) + AW3 * (c.x - 0.5)) / L2;
-	vec3 e = vnd(p * FA1 + vec2(2.2, 6.6), 4u), f = vnd(p * FA2 + vec2(8.1, 0.9), 5u);
-	float s1 = clamp((e.x - 0.12) / 0.5, 0., 1.), s2 = clamp((f.x - 0.25) / 0.45, 0., 1.);
+	vec3 e = vnd(vec2(dot(p, c1) * FAC + 2.2, dot(p, w1) * FAW + 6.6), 4u), f = vnd(p * FA2 + vec2(8.1, 0.9), 5u);
+	float s1 = clamp((e.x - 0.15) / 0.6, 0., 1.), s2 = clamp((f.x - 0.25) / 0.45, 0., 1.);
 	float A1 = s1 * s1 * (3. - 2. * s1), A2 = s2 * s2 * (3. - 2. * s2);
+	vec2 ga = 10. * s1 * (1. - s1) * (e.y * FAC * c1 + e.z * FAW * w1);
 	vec3 d1 = vnd(p * FD + vec2(4.4, 0.7), 6u), d2 = vnd(p * FD * 2.3 + vec2(9.1, 3.3), 7u), m1 = vnd(p * FM + vec2(1.9, 7.3), 12u);
-	float x1 = fract(p1);
-	g0 = vec4(p1, (w1 + AW1 * F1 * a.yz + AW2 * F2 * b.yz + AW4 * F4 * h.yz) / L1, A1);
+	float gu = dot(p, w1), gv = dot(p, c1) / GV, gk = gu > 0. ? 1. / GU : 1. / GS, su = gu * gk;
+	float bq = max(1. - su * su, 0.), cq = max(1. - gv * gv, 0.), B = bq * bq, C = cq * cq;
+	vec2 gb = -4. * su * bq * gk * C * w1 - 4. * gv * cq / GV * B * c1;
+	float kt = clamp((B * C - 0.2) / 0.55, 0., 1.), K = 1. - 0.9 * kt * kt * (3. - 2. * kt);
+	vec2 gK = -9.8181818 * kt * (1. - kt) * gb;
+	float x1 = fract(p1), dp;
+	g0 = vec4(p1, (w1 + AW1 * F1 * a.yz + AW2 * F2 * b.yz + AW4 * F4 * h.yz) / L1, A1 * K);
 	g1 = vec4(p2, (w2 + AW3 * F3 * c.yz) / L2, A2);
-	g2 = vec4(12. * s1 * (1. - s1) * FA1 * e.yz, 13.333333 * s2 * (1. - s2) * FA2 * f.yz);
-	g3 = vec4(HD * FD * (d1.yz + 1.035 * d2.yz) + HM * FM * m1.yz, 0., 0.);
-	return HD * (d1.x + 0.45 * d2.x - 0.72) + HM * (m1.x - 0.5) + H1 * A1 * prf(x1, LA1, LB1, ro / L1) + H2 * A2 * msk(x1) * prf(fract(p2), LA2, LB2, ro / L2);
+	g2 = vec4(ga * K + A1 * gK, 13.333333 * s2 * (1. - s2) * FA2 * f.yz);
+	g3 = vec4(HD * FD * (d1.yz + 1.035 * d2.yz) + HM * FM * m1.yz + GH * gb, B * C, 0.);
+	return HD * (d1.x + 0.45 * d2.x - 0.72) + HM * (m1.x - 0.5) + GH * B * C + H1 * A1 * K * bmp(x1, LA1, LB1, dp) + H2 * A2 * msk(x1) * bmp(fract(p2), LA2, LB2, dp);
 }
 `
 
@@ -102,22 +105,22 @@ export function make(rd, seed) {
 	const scene = new THREE.Scene()
 	const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 4000)
 	const sg = R() < 0.5 ? -1 : 1
-	const gm = (0.14 + R() * 0.64) * sg
+	const gm = (0.96 + R() * 0.52) * sg
 	const a1 = gm - sg * Math.PI / 2, a2 = a1 + (R() < 0.5 ? -1 : 1) * (0.25 + R() * 0.35)
 	const w1 = new THREE.Vector2(Math.sin(a1), -Math.cos(a1)), w2 = new THREE.Vector2(Math.sin(a2), -Math.cos(a2))
 	const cr = new THREE.Vector2(-w1.y, w1.x)
-	const sa0 = gm + sg * (Math.PI / 2 + R() * 0.8 - 0.3)
+	const sa0 = (R() < 0.5 ? -1 : 1) * (1.22 + R() * 0.7)
 	const se = 0.38 + R() * 0.12
-	const l1 = 180 + R() * 80, h1 = l1 * (0.08 + R() * 0.025)
-	const l2 = l1 * (0.2 + R() * 0.06), h2 = l2 * (0.07 + R() * 0.03)
+	const q1 = 0.15 + R() * 0.035, q2 = 0.08 + R() * 0.03
+	const l1 = 190 + R() * 80, h1 = l1 * q1
+	const l2 = l1 * (0.2 + R() * 0.06), h2 = l2 * q2
 	const k = {
-		sdv: Math.floor(R() * 1e9), w1, w2, l1, h1, la1: h1 / (0.63 * l1), l2, h2, la2: h2 / (0.6 * l2), tr: 0.12,
+		sdv: Math.floor(R() * 1e9), w1, w2, l1, h1, la1: 2.2 * q1, lb1: 1 - 3.08 * q1, l2, h2, la2: 2.2 * q2, lb2: 1 - 3.08 * q2,
 		aw1: l1 * 0.3, f1: 1 / (l1 * 1.5), aw2: l1 * 0.12, f2: 1 / (l1 * 0.45), aw3: l2 * 0.3, f3: 1 / (l2 * 1.8), aw4: l1 * 0.02, f4: 1 / (l1 * 0.14),
-		fa1: 1 / (l1 * 3), fa2: 1 / (l2 * 4), hd: 10 + R() * 6, fd: 1 / (800 + R() * 200), hm: 55 + R() * 20, fm: 1 / (1400 + R() * 300)
+		fac: 1 / (l1 * 1.1), faw: 1 / (l1 * 2.2), fa2: 1 / (l2 * 4), hd: 10 + R() * 6, fd: 1 / (800 + R() * 200), hm: 16 + R() * 8, fm: 1 / (1400 + R() * 300),
+		gh: 150 + R() * 40, gu: 330 + R() * 80, gs: 560 + R() * 120, gv: 800 + R() * 250
 	}
-	k.lb1 = k.la1 + 0.08 + R() * 0.08
-	k.lb2 = k.la2 + 0.1
-	k.hmx = k.hd * 0.73 + k.hm * 0.5 + h1 + h2 + 1
+	k.hmx = k.hd * 0.73 + k.hm * 0.5 + k.gh + h1 + h2 + 1
 
 	const hh = (x, y, s) => {
 		let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + k.sdv + Math.imul(s, -2048144777) | 0
@@ -130,23 +133,25 @@ export function make(rd, seed) {
 		const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy)
 		return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy
 	}
-	const prf = (x, la, lb) => {
-		const yl = 1 - x / la
-		const hl = (yl > k.tr ? yl - k.tr * 0.5 : yl > 0 ? yl * yl / (2 * k.tr) : 0) / (1 - k.tr * 0.5)
-		const t = Math.max((x - lb) / (1 - lb), 0)
-		return Math.max(hl, t * t * (2 - t))
+	const bmp = (x, la, lb) => {
+		const s = x < (la + lb) * 0.5 ? x / la : (x - 1) / (1 - lb)
+		const q = Math.max(1 - s * s, 0)
+		return q * q
 	}
 	const cl = v => Math.min(Math.max(v, 0), 1)
 	const ter = (x, z) => {
 		const a = vn(x * k.f1 + 3.7, z * k.f1 + 1.3, 1), b = vn(x * k.f2 + 5.1, z * k.f2 + 8.9, 2), c = vn(x * k.f3 + 6.3, z * k.f3 + 2.4, 3), g = vn(x * k.f4 + 0.6, z * k.f4 + 4.8, 14)
 		const p1 = (x * w1.x + z * w1.y + k.aw1 * (a - 0.5) + k.aw2 * (b - 0.5) + k.aw4 * (g - 0.5)) / l1
 		const p2 = (x * w2.x + z * w2.y + k.aw3 * (c - 0.5)) / l2
-		const s1 = cl((vn(x * k.fa1 + 2.2, z * k.fa1 + 6.6, 4) - 0.12) / 0.5), s2 = cl((vn(x * k.fa2 + 8.1, z * k.fa2 + 0.9, 5) - 0.25) / 0.45)
+		const s1 = cl((vn((z * w1.x - x * w1.y) * k.fac + 2.2, (x * w1.x + z * w1.y) * k.faw + 6.6, 4) - 0.15) / 0.6), s2 = cl((vn(x * k.fa2 + 8.1, z * k.fa2 + 0.9, 5) - 0.25) / 0.45)
 		const A1 = s1 * s1 * (3 - 2 * s1), A2 = s2 * s2 * (3 - 2 * s2)
 		const x1 = p1 - Math.floor(p1), x2 = p2 - Math.floor(p2)
-		const M = sst(k.la1 + 0.02, k.la1 + 0.14, x1) * (1 - sst(0.9, 0.985, x1))
+		const M = sst(k.la1 * 0.7, k.la1 * 1.05, x1) * (1 - sst(0.88, 0.98, x1))
 		const D = k.hd * (vn(x * k.fd + 4.4, z * k.fd + 0.7, 6) + 0.45 * vn(x * k.fd * 2.3 + 9.1, z * k.fd * 2.3 + 3.3, 7) - 0.72) + k.hm * (vn(x * k.fm + 1.9, z * k.fm + 7.3, 12) - 0.5)
-		return { h: D + h1 * A1 * prf(x1, k.la1, k.lb1) + h2 * A2 * M * prf(x2, k.la2, k.lb2), p1, A1 }
+		const gu = x * w1.x + z * w1.y, gv = (z * w1.x - x * w1.y) / k.gv, su = gu / (gu > 0 ? k.gu : k.gs)
+		const bq = Math.max(1 - su * su, 0), cq = Math.max(1 - gv * gv, 0), G = bq * bq * cq * cq
+		const K = 1 - 0.9 * sst(0.2, 0.75, G)
+		return { h: D + k.gh * G + h1 * A1 * K * bmp(x1, k.la1, k.lb1) + h2 * A2 * M * bmp(x2, k.la2, k.lb2), p1, A1: A1 * K }
 	}
 	const crs = (x, z) => {
 		for (let i = 0; i < 6; i++) {
@@ -158,28 +163,7 @@ export function make(rd, seed) {
 		return [x, z]
 	}
 
-	let mx0 = 0, mz0 = 0, mv = -1
-	for (let i = -15; i <= 15; i++) {
-		for (let j = -15; j <= 15; j++) {
-			const v = vn(i * 60 * k.fm + 1.9, j * 60 * k.fm + 7.3, 12)
-			if (v > mv) {
-				mv = v
-				mx0 = i * 60
-				mz0 = j * 60
-			}
-		}
-	}
-	let bx = 0, bz = 0, bh = -1e9
-	for (let i = 0; i < 200; i++) {
-		const [x, z] = crs(mx0 + (R() - 0.5) * 300, mz0 + (R() - 0.5) * 300)
-		const h = ter(x, z).h
-		if (h > bh) {
-			bh = h
-			bx = x
-			bz = z
-		}
-	}
-	const cx = bx - w1.x * 1.5, cz = bz - w1.y * 1.5
+	const cx = w1.x * 0.3 * k.gu, cz = w1.y * 0.3 * k.gu
 	const cam0 = new THREE.Vector3(cx, ter(cx, cz).h + 1.7, cz)
 
 	const nr = mob ? 360 : 560, nt = mob ? 1024 : 2048, nh = mob ? 700 : 1400
@@ -187,7 +171,6 @@ export function make(rd, seed) {
 	k.cz = cz
 	k.r0 = 0.3
 	k.lnr = Math.log(3000 / k.r0)
-	k.rk = 0.6 * (Math.exp(k.lnr / nr) - 1)
 	const tg = tgl(k)
 	const dg = dgl(R() * Math.PI)
 
@@ -209,7 +192,7 @@ varying vec2 vu;
 void main() {
 	float a = (vu.x - 0.5) * 6.2831853, r = R0 * exp(vu.y * LNR);
 	vec4 g0, g1, g2, g3;
-	gl_FragColor = vec4(ter(co + r * vec2(cos(a), sin(a)), RK * r, g0, g1, g2, g3), 0., 0., 1.);
+	gl_FragColor = vec4(ter(co + r * vec2(cos(a), sin(a)), g0, g1, g2, g3), 0., 0., 1.);
 }`
 		}))
 		const oc = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
@@ -282,7 +265,7 @@ varying vec3 vw;
 varying vec4 v0, v1, v2, v3;
 void main() {
 	vec2 p = position.xz;
-	float h = ter(p, RK * length(p - co), v0, v1, v2, v3);
+	float h = ter(p, v0, v1, v2, v3);
 	vw = vec3(p.x, h, p.y);
 	gl_Position = projectionMatrix * viewMatrix * vec4(vw, 1.);
 }`,
@@ -310,20 +293,6 @@ float shd(vec3 p, vec3 n, float l) {
 	}
 	return sh;
 }
-float prd(float x, float la, float lb, out float dp, out float le) {
-	float yl = 1. - x / la, kn = 1. / (1. - TR * 0.5);
-	float hl = (yl > TR ? yl - TR * 0.5 : yl > 0. ? yl * yl / (2. * TR) : 0.) * kn;
-	float t = max((x - lb) / (1. - lb), 0.);
-	float hs = t * t * (2. - t);
-	if (hl > hs) {
-		dp = -(yl > TR ? 1. : max(yl, 0.) / TR) * kn / la;
-		le = smoothstep(0., TR, yl);
-		return hl;
-	}
-	dp = t * (4. - 3. * t) / (1. - lb);
-	le = 0.;
-	return hs;
-}
 float dss(float a, float b, float x) {
 	float t = clamp((x - a) / (b - a), 0., 1.);
 	return 6. * t * (1. - t) / (b - a);
@@ -332,10 +301,12 @@ void main() {
 	vec3 V = vw - cameraPosition;
 	float l = length(V);
 	V /= l;
-	float x1 = fract(v0.x), x2 = fract(v1.x), d1, d2, e1, e2;
-	float P1 = prd(x1, LA1, LB1, d1, e1), P2 = prd(x2, LA2, LB2, d2, e2);
+	float x1 = fract(v0.x), x2 = fract(v1.x), d1, d2;
+	float P1 = bmp(x1, LA1, LB1, d1), P2 = bmp(x2, LA2, LB2, d2);
+	float e1 = x1 < (LA1 + LB1) * 0.5 ? smoothstep(0.25, 0.45, x1 / LA1) * (1. - smoothstep(0.8, 0.95, x1 / LA1)) : 0.;
+	float e2 = x2 < (LA2 + LB2) * 0.5 ? smoothstep(0.25, 0.45, x2 / LA2) * (1. - smoothstep(0.8, 0.95, x2 / LA2)) : 0.;
 	float M = msk(x1);
-	float dm = dss(LA1 + 0.02, LA1 + 0.14, x1) * (1. - smoothstep(0.9, 0.985, x1)) - smoothstep(LA1 + 0.02, LA1 + 0.14, x1) * dss(0.9, 0.985, x1);
+	float dm = dss(LA1 * 0.7, LA1 * 1.05, x1) * (1. - smoothstep(0.88, 0.98, x1)) - smoothstep(LA1 * 0.7, LA1 * 1.05, x1) * dss(0.88, 0.98, x1);
 	vec2 g = v3.xy + H1 * (v2.xy * P1 + v0.w * d1 * v0.yz) + H2 * (M * (v2.zw * P2 + v1.w * d2 * v1.yz) + v1.w * P2 * dm * v0.yz);
 	vec3 r1 = vnd(vw.xz * 0.33 + vec2(1.3, 7.1), 8u), r2 = vnd(vw.xz * 0.09 + vec2(7.7, 2.9), 9u), r3 = vnd(vw.xz * 0.045 + vec2(0.4, 5.2), 10u);
 	vec3 r4 = vnd(vw.xz * 1.3 + vec2(5.5, 3.3), 13u);
@@ -344,21 +315,25 @@ void main() {
 	float fw = fwidth(rs);
 	float a1 = 6.2831853 * rs, a2 = 6.2831853 * (rs * 1.17 + 0.3);
 	float dr = mix(cos(a1 + 0.5 * sin(a1)) * (1. + 0.5 * cos(a1)), cos(a2 + 0.5 * sin(a2)) * (1. + 0.5 * cos(a2)) * 1.17, smoothstep(0.35, 0.65, r2.x));
-	float bd = min(x1 > 0.5 ? (1. - x1) * L1 : 99., x2 > 0.5 ? (1. - x2) * L2 : 99.);
 	float le = max(e1, e2 * M * v1.w);
-	g += dr * gs * 0.022 * (1. - smoothstep(0.12, 0.3, fw)) * (1. - le) * smoothstep(0.3, 1.6, bd) * (0.2 + 0.8 * smoothstep(0.3, 0.7, r3.x)) * smoothstep(0.3, 0.7, r4.x + 0.3 * r1.x);
+	g += dr * gs * 0.022 * (1. - smoothstep(0.12, 0.3, fw)) * (1. - le) * (0.2 + 0.8 * smoothstep(0.3, 0.7, r3.x)) * smoothstep(0.3, 0.7, r4.x + 0.3 * r1.x);
 	vec2 c1 = vec2(-w1.y, w1.x);
 	vec3 gf = vnd(vec2(dot(vw.xz, c1) / 1.1, dot(vw.xz, w1) / 7.), 11u);
 	g += (gf.y * c1 / 1.1 + gf.z * w1 / 7.) * 0.1 * e1 * (1. - smoothstep(0.3, 0.8, fwidth(dot(vw.xz, c1) / 1.1)));
+	float fx = max(length(fwidth(vw.xz)), 1e-4), lv = log2(fx), lf = floor(lv), lt = lv - lf;
+	ivec2 k0 = ivec2(floor(vw.xz / exp2(lf))), k1 = ivec2(floor(vw.xz / exp2(lf + 1.)));
+	float gw = 1. - 0.9 * smoothstep(15., 120., l);
+	g += (vec2(mix(hh(k0, 17u), hh(k1, 18u), lt), mix(hh(k0, 19u), hh(k1, 20u), lt)) - 0.5) * 0.14 * gw;
 	vec3 n = normalize(vec3(-g.x, 1., -g.y));
 	float nl = dot(n, sn);
 	float lit = nl > 0. ? nl * mix(shd(vw, n, l), 1., smoothstep(600., 1400., l)) : 0.;
 	float q = smoothstep(0., 0.26, lit);
-	float t = mix(1.9 + 0.25 * n.y, 2.92 + 0.95 * smoothstep(0.45, 0.95, lit), q) + (r3.x - 0.5) * 0.12;
-	t = mix(t, mix(0.75, 1.45, q) + 0.3 * (r2.x - 0.5) + 0.2 * (r3.x - 0.5), (1. - smoothstep(0.005, 0.05, v0.w * P1)) * 0.92 * (1. - 0.6 * smoothstep(300., 1500., l)));
+	float t = mix(1.9 + 0.25 * n.y, 2.92 + 0.98 * smoothstep(0.35, 0.8, lit), q) + (r3.x - 0.5) * 0.12;
+	t = mix(t, mix(0.75, 1.45, q) + 0.12 * (r2.x - 0.5) + 0.08 * (r3.x - 0.5), (1. - smoothstep(0.01, 0.1, v0.w * P1)) * (1. - smoothstep(0.03, 0.25, v3.z)) * 0.92 * (1. - 0.6 * smoothstep(300., 1500., l)));
 	float fp = fwidth(v0.x);
-	float dc = (x1 < 0.5 ? x1 : 1. - x1) * L1;
-	t = mix(t, 3.97, exp(-dc / max(0.9, 1.5 * fp * L1)) * q * smoothstep(0.35, 0.7, v0.w) * 0.85);
+	t = mix(t, 3.95, smoothstep(0.8, 1., P1) * smoothstep(0.5, 0.9, v0.w) * q * 0.5);
+	t += (mix(hh(k0, 15u), hh(k1, 16u), lt) - 0.5) * 0.08 * gw;
+	t = mix(t, 3.97, step(0.998, hh(k0, 21u)) * q * (1. - smoothstep(5., 15., l)) * 0.5);
 	t = mix(t, clamp(t, 2.3, 3.5), smoothstep(0.25, 0.7, fp));
 	t = mix(t, hzt(V), 1. - exp(-l / 3200.));
 	gl_FragColor = vec4(dsp(dch(mix(t, 4., wh))), 1.);
@@ -452,7 +427,7 @@ void main() {
 		ly += (inp.my * 0.03 - ly) * (1 - Math.exp(-dt * 2))
 		const yw = lx + (camera.aspect < 1 ? (w1.x < 0 ? -1 : 1) * 0.32 * (1 - camera.aspect) : 0)
 		camera.position.copy(cam0)
-		look.set(cam0.x + Math.sin(yw) * 10, cam0.y - 1.6 + ly * 10, cam0.z - Math.cos(yw) * 10)
+		look.set(cam0.x + Math.sin(yw) * 10, cam0.y - 2.1 + ly * 10, cam0.z - Math.cos(yw) * 10)
 		camera.lookAt(look)
 		camera.updateMatrixWorld()
 		sky.position.copy(camera.position)
