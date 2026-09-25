@@ -23,7 +23,7 @@ export function make(rd, seed) {
 	const R = rng(seed ^ 0x3c6ef372)
 	const scene = new THREE.Scene()
 	const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 3000)
-	const wy = -11, dh = wy + 0.5, cz = 48
+	const wy = -11, dh = wy + 0.5, cz = 36
 	const sk = build(rd, seed, true)
 	sk.grp.rotation.x = 0.14
 	scene.add(sk.grp, sk.far)
@@ -116,15 +116,14 @@ void main() {
 				}
 			}
 		}
-		for (let uu = -3; uu < 5; uu += 0.185) {
-			box(uu + 0.0925, (R() - 0.5) * 0.02, dh - 0.0225 + (R() - 0.5) * 0.008, 0.17 + (R() - 0.5) * 0.016, 2.4 + (R() - 0.5) * 0.06, 0.045, 0)
+		for (let uu = -0.6; uu < 3.4; uu += 0.185) {
+			box(uu + 0.0925, (R() - 0.5) * 0.02, dh - 0.0225 + (R() - 0.5) * 0.008, 0.17 + (R() - 0.5) * 0.016, 4 + (R() - 0.5) * 0.06, 0.045, 0)
 		}
-		for (const vv of [-0.85, 0.85]) box(1, vv, dh - 0.145, 8.1, 0.1, 0.2, 1)
-		box(5.03, 0, dh - 0.12, 0.05, 2.5, 0.28, 0)
-		for (const uu of [-2.1, 1.4]) {
-			for (const vv of [-1.12, 1.12]) box(uu, vv, (wy + dh - 0.045) / 2, 0.16, 0.16, dh - 0.045 - wy, 2)
-		}
-		for (const vv of [-1.12, 1.12]) box(4.9, vv, (wy + dh + 0.75) / 2, 0.19, 0.19, dh + 0.75 - wy, 2)
+		for (const vv of [-1.7, 0, 1.7]) box(1.4, vv, dh - 0.145, 4, 0.1, 0.2, 1)
+		box(3.43, 0, dh - 0.12, 0.05, 4.1, 0.28, 0)
+		for (const vv of [-2.03, 2.03]) box(1.4, vv, dh - 0.12, 4.1, 0.05, 0.28, 1)
+		for (const vv of [-1.9, 1.9]) box(-0.5, vv, (wy + dh - 0.045) / 2, 0.16, 0.16, dh - 0.045 - wy, 2)
+		for (const vv of [-1.9, 1.9]) box(3.3, vv, (wy + dh + 0.7) / 2, 0.19, 0.19, dh + 0.7 - wy, 2)
 		const g = new THREE.BufferGeometry()
 		g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
 		g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3))
@@ -175,55 +174,11 @@ void main() {
 	})()
 	scene.add(pier)
 
-	const shore = (() => {
-		const tb = []
-		for (let i = 0; i < 97; i++) tb.push(R())
-		const nz = x => {
-			const i = Math.floor(x), f = x - i, t = f * f * (3 - 2 * f)
-			const k = ((i % 97) + 97) % 97
-			return tb[k] * (1 - t) + tb[(k + 1) % 97] * t
-		}
-		const M = mob ? 520 : 1000, P = [], H = [], I = []
-		for (const [r0, rr, h0, hk, ly, ph] of [[640, 90, 14, 40, 1, 31.7], [330, 170, 4, 20, 0, 3.1]]) {
-			for (let j = 0; j <= M; j++) {
-				const a = -Math.PI / 2 + (j / M - 0.5) * 3.8
-				const r = r0 + rr * nz(a * 3 + ph)
-				const h = h0 + hk * Math.pow(nz(a * 5 + ph * 2), 1.5) + 2.6 * Math.pow(nz(a * 140 + ph * 3), 2) + 1.2 * nz(a * 420 + ph)
-				const x = cam0.x + Math.cos(a) * r, z = cam0.z + Math.sin(a) * r
-				const o = P.length / 3
-				P.push(x, wy - 0.05, z, x, wy + h, z)
-				H.push(0, ly, 1, ly)
-				if (j) I.push(o - 2, o, o - 1, o - 1, o, o + 1)
-			}
-		}
-		const g = new THREE.BufferGeometry()
-		g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3))
-		g.setAttribute('hl', new THREE.Float32BufferAttribute(H, 2))
-		g.setIndex(I)
-		const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
-			side: THREE.DoubleSide,
-			vertexShader: `attribute vec2 hl;
-varying vec2 vh;
-void main() {
-	vh = hl;
-	gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.);
-}`,
-			fragmentShader: `${glsl}
-varying vec2 vh;
-void main() {
-	gl_FragColor = vec4(dsp(mix(pk0, pk1, (0.12 + 0.3 * vh.y) * (1. - 0.55 * vh.x))), 1.);
-}`
-		}))
-		m.frustumCulled = false
-		return m
-	})()
-	scene.add(shore)
-
 	const nf = mob ? 32 : 64
 	const fa = new Float32Array(nf * 4), fb = new Float32Array(nf * 4)
 	for (let i = 0; i < nf; i++) {
-		const uu = 1.5 + Math.pow(R(), 0.8) * 26, vv = (R() - 0.5) * (6 + uu * 0.9)
-		fa.set([cam0.x + pd.x * uu + pq.x * vv, wy + 0.25 + Math.pow(R(), 1.5) * 2.8, cam0.z + pd.y * uu + pq.y * vv, R() * 6.283], i * 4)
+		const uu = 3.5 + Math.pow(R(), 0.8) * 24, vv = (R() - 0.5) * (6 + uu * 0.9)
+		fa.set([cam0.x + pd.x * uu + pq.x * vv, wy + 0.12 + Math.pow(R(), 2) * 0.9, cam0.z + pd.y * uu + pq.y * vv, R() * 6.283], i * 4)
 		fb.set([0.4 + R() * 1.1, 0.12 + R() * 0.25, 2.2 + R() * 4, R()], i * 4)
 	}
 	const flies = (() => {
@@ -241,12 +196,12 @@ attribute vec4 fa, fb;
 uniform float ut, pr, fi;
 varying float va;
 void main() {
-	vec3 p = fa.xyz + vec3(sin(ut * fb.y + fa.w) * fb.x, sin(ut * fb.y * 1.37 + fa.w * 2.1) * 0.35 * fb.x, cos(ut * fb.y * 0.83 + fa.w * 1.3) * fb.x);
+	vec3 p = fa.xyz + vec3(sin(ut * fb.y + fa.w) * fb.x, sin(ut * fb.y * 1.37 + fa.w * 2.1) * 0.08 * fb.x, cos(ut * fb.y * 0.83 + fa.w * 1.3) * fb.x);
 	float bp = fract(ut / fb.z + fb.w);
 	va = (0.12 + 0.88 * smoothstep(0., 0.08, bp) * (1. - smoothstep(0.12, 0.3, bp))) * fi;
 	vec4 mv = modelViewMatrix * vec4(p, 1.);
 	gl_Position = projectionMatrix * mv;
-	gl_PointSize = clamp(0.18 * pr * 700. / max(-mv.z, 0.1), 2.5 * pr, 14. * pr);
+	gl_PointSize = clamp(0.2 * pr * 700. / max(-mv.z, 0.1), 3. * pr, 15. * pr);
 }`,
 			fragmentShader: `${glsl}
 varying float va;
@@ -254,7 +209,7 @@ void main() {
 	vec2 q = gl_PointCoord * 2. - 1.;
 	float r = dot(q, q);
 	if (r > 1. || va < 0.004) discard;
-	gl_FragColor = vec4(dsp(pk7) * (exp(-r * 30.) * 0.85 + exp(-r * 5.) * 0.18) * va, 1.);
+	gl_FragColor = vec4(dsp(pk7) * (exp(-r * 30.) * 0.7 + exp(-r * 5.) * 0.14) * va, 1.);
 }`
 		}))
 		m.frustumCulled = false
@@ -262,11 +217,11 @@ void main() {
 	})()
 	scene.add(flies)
 
-	const fp = new THREE.Vector3(), pc = new THREE.Vector3(cam0.x + pd.x * 2.5, dh, cam0.z + pd.y * 2.5)
+	const fp = new THREE.Vector3(), pc = new THREE.Vector3(cam0.x + pd.x * 1.4, dh, cam0.z + pd.y * 1.4)
 	const fw = []
 	function fpos(i, t) {
 		const a = fa[i * 4 + 3], A = fb[i * 4], f = fb[i * 4 + 1]
-		fp.set(fa[i * 4] + Math.sin(t * f + a) * A, fa[i * 4 + 1] + Math.sin(t * f * 1.37 + a * 2.1) * 0.35 * A, fa[i * 4 + 2] + Math.cos(t * f * 0.83 + a * 1.3) * A)
+		fp.set(fa[i * 4] + Math.sin(t * f + a) * A, fa[i * 4 + 1] + Math.sin(t * f * 1.37 + a * 2.1) * 0.08 * A, fa[i * 4 + 2] + Math.cos(t * f * 0.83 + a * 1.3) * A)
 		const bp = t / fb[i * 4 + 2] + fb[i * 4 + 3]
 		const k = bp - Math.floor(bp)
 		return (0.12 + 0.88 * sst(0, 0.08, k) * (1 - sst(0.12, 0.3, k))) * u.fi.value
@@ -403,7 +358,7 @@ void main() {
 	}
 
 	function dispose() {
-		[wat, pier, shore, flies].forEach(m => {
+		[wat, pier, flies].forEach(m => {
 			m.geometry.dispose()
 			m.material.dispose()
 		})

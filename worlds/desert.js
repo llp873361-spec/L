@@ -329,13 +329,13 @@ void main() {
 	float lit = nl > 0. ? nl * mix(shd(vw, n, l), 1., smoothstep(600., 1400., l)) : 0.;
 	float q = smoothstep(0., 0.26, lit);
 	float t = mix(1.9 + 0.25 * n.y, 2.92 + 0.98 * smoothstep(0.35, 0.8, lit), q) + (r3.x - 0.5) * 0.12;
-	t = mix(t, mix(0.75, 1.45, q) + 0.12 * (r2.x - 0.5) + 0.08 * (r3.x - 0.5), (1. - smoothstep(0.01, 0.1, v0.w * P1)) * (1. - smoothstep(0.03, 0.25, v3.z)) * 0.92 * (1. - 0.6 * smoothstep(300., 1500., l)));
+	t = mix(t, mix(1., 1.45, q) + 0.12 * (r2.x - 0.5) + 0.08 * (r3.x - 0.5), (1. - smoothstep(0.01, 0.1, v0.w * P1)) * (1. - smoothstep(0.03, 0.25, v3.z)) * 0.92 * (1. - 0.6 * smoothstep(300., 1500., l)));
 	float fp = fwidth(v0.x);
 	t = mix(t, 3.95, smoothstep(0.8, 1., P1) * smoothstep(0.5, 0.9, v0.w) * q * 0.5);
 	t += (mix(hh(k0, 15u), hh(k1, 16u), lt) - 0.5) * 0.08 * gw;
 	t = mix(t, 3.97, step(0.998, hh(k0, 21u)) * q * (1. - smoothstep(5., 15., l)) * 0.5);
 	t = mix(t, clamp(t, 2.3, 3.5), smoothstep(0.25, 0.7, fp));
-	t = mix(t, hzt(V), 1. - exp(-l / 3200.));
+	t = mix(max(t, 1.), hzt(V), 1. - exp(-l / 3200.));
 	gl_FragColor = vec4(dsp(dch(mix(t, 4., wh))), 1.);
 }`
 		}))
