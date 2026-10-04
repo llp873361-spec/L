@@ -1,0 +1,12 @@
+{
+	"name": "greece-video",
+	"version": "1.0.0",
+	"private": true,
+	"description": "抖音竖屏知识视频《古希腊》：canvas 逐帧画，playwright 截图，ffmpeg 合成",
+	"scripts": {
+		"render": "node render.js"
+	},
+	"dependencies": {
+		"playwright": "1.56.1"
+	}
+}
