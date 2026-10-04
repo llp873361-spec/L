@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>古希腊 vibe 知识大赏</title>
+<style>
+@font-face {
+	font-family: 'Noto Serif SC';
+	src: url(fonts/NotoSerifSC-Regular.otf) format('opentype');
+	/* 只管中文和全角标点。思源宋体自己也带拉丁和希腊字母，不限范围的话这些字母会被它抢走，轮不到 Noto Serif */
+	unicode-range: U+2E80-2FFF, U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
+}
+@font-face {
+	font-family: 'Noto Serif';
+	src: url(fonts/NotoSerif-Regular.ttf) format('truetype');
+}
+html, body { margin: 0; height: 100%; background: #24211e; }
+body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font: 13px/1.4 sans-serif; color: #bbb; }
+#cv { display: block; height: calc(100vh - 56px); width: auto; aspect-ratio: 9 / 16; }
+#bar { display: flex; align-items: center; gap: 10px; width: min(92vw, calc((100vh - 56px) * 9 / 16)); }
+#bar input { flex: 1; }
+#tm { min-width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+#err { display: none; position: fixed; left: 0; right: 0; top: 0; padding: 16px 20px; background: #a40000; color: #fff; font-size: 16px; white-space: pre-wrap; }
+body.rd { display: block; }
+body.rd #cv { width: 1080px; height: 1920px; }
+body.rd #bar { display: none; }
+</style>
+</head>
+<body>
+<canvas id="cv" width="1080" height="1920"></canvas>
+<div id="bar"><button id="btn">暂停</button><input id="seek" type="range" min="0" max="1" step="0.001" value="0"><span id="tm"></span></div>
+<div id="err"></div>
+<script>
+'use strict';
+const qs = new URLSearchParams(location.search);
+const rnd = qs.get('render') === '1';   // 渲染模式：不自动播，等 render.js 来调 draw
+const dbg = qs.get('debug') === '1';    // 叠加安全区和时间
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+if (rnd) document.body.classList.add('rd');
+
+// 配色，画面里只用这些
+const pal = {
+	bg0: '#F2ECE2', bg1: '#E6DBCB',   // 背景上下两头
+	mw: '#EDE8E0', ms: '#CFC6B8',     // 大理石白、大理石阴影
+	tc: '#C2633A',                    // 赤陶
+	blu: '#1F4E79',                   // 爱琴海蓝
+	blk: '#1B1A17',                   // 黑绘黑
+	gld: '#B8963E',                   // 古金
+	grn: '#4F7F6E',                   // 青铜绿
+	wr: '#6E1F2A',                    // 酒红
+	skn: '#D9B48A',                   // 肤色
+	txt: '#2A2420', sub: '#8A7B6A'    // 文字、次要文字
+};
+const fnt = px => px + "px 'Noto Serif SC', 'Noto Serif'";
+
+// 固定种子的随机数
+function mulberry32(a) {
+	return function () {
+		a |= 0; a = a + 0x6D2B79F5 | 0;
+		let t = Math.imul(a ^ a >>> 15, 1 | a);
+		t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+		return ((t ^ t >>> 14) >>> 0) / 4294967296;
+	};
+}
+
+// 缓动和几个小工具
+const c01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const pr = (t, a, b) => c01((t - a) / (b - a));      // t 在 a~b 之间走到几成了
+const eoc = x => 1 - Math.pow(1 - x, 3);             // easeOutCubic
+const eis = x => -(Math.cos(Math.PI * x) - 1) / 2;   // easeInOutSine
+const sst = (a, b, x) => { const k = c01((x - a) / (b - a)); return k * k * (3 - 2 * k); };
+
+// ================= 文案 =================
+// / 是断行，句末不加标点是故意的。插画还没画的条目先不排进时间线
+const list = [
+	{ txt: '古希腊雕像原本是彩色的 / 你见过的纯白，是颜料掉光后的样子', art: a01 },
+	{ txt: '古代奥运选手裸体比赛 / gymnasium 的词根就是「裸体」' },
+	{ txt: '据记载，已婚女性偷看奥运会 / 会被扔下山崖' },
+	{ txt: '雅典人投票流放政客 / 选票是刻着名字的陶片' },
+	{ txt: '一个文盲请阿里斯提德帮他写陶片 / 要流放的人，正是阿里斯提德本人' },
+	{ txt: 'idiot 最早的意思 / 是「不参与公共事务的人」' },
+	{ txt: '苏格拉底一个字都没写过 / 我们知道的他，主要来自学生的记录' },
+	{ txt: '帕特农神庙几乎没有一条直线 / 弧度是故意做的，为了骗过眼睛' },
+	{ txt: '两千年前，希腊人造出了 / 能预测日食的齿轮机械' },
+	{ txt: '古希腊人喝酒要兑水 / 喝纯酒，会被当成野蛮人' }
+];
+const two = i => String(i + 1).padStart(2, '0');
+
+// 字数：中文和全角标点算 1，拉丁字母、数字、空格算 0.5。/ 两边的空格只是写文案时的排版，切行时去掉，不算字数
+function cnt(lns, tag) {
+	let n = 0;
+	for (const ln of lns) for (const ch of ln) {
+		const u = ch.codePointAt(0);
+		if ((u >= 0x4E00 && u <= 0x9FFF) || (u >= 0x3400 && u <= 0x4DBF) || (u >= 0x3000 && u <= 0x303F) || (u >= 0xFF00 && u <= 0xFFEF)) n += 1;
+		else if (/[A-Za-z0-9 ]/.test(ch)) n += 0.5;
+		else throw new Error('第' + tag + '条里有字数规则没覆盖到的字符「' + ch + '」，没法算时长');
+	}
+	return n;
+}
+list.forEach((it, i) => {
+	it.lns = it.txt.split('/').map(s => s.trim());
+	if (it.lns.some(s => !s)) throw new Error('第' + two(i) + '条有空行，检查一下 / 的位置');
+	it.n = cnt(it.lns, two(i));
+	// 时长按 0.1s 为单位存整数，免得小数一路加下来有误差
+	it.d = Math.max(36, Math.round((it.n / 7 + 1.2) * 10));
+});
+
+// ================= 时间线 =================
+// 相邻两段叠 0.5s 做交叉过渡，所以下一段从上一段结束前 0.5s 开始
+const segs = [{ k: 'op', s: 0, d: 25 }];
+let end = 25, all = true;
+for (let i = 0; i < list.length; i++) {
+	if (!list[i].art) { all = false; break; }
+	segs.push({ k: 'it', i, s: end - 5, d: list[i].d });
+	end = end - 5 + list[i].d;
+}
+if (all) { segs.push({ k: 'ed', s: end - 5, d: 25 }); end = end - 5 + 25; }
+for (const sg of segs) { sg.st = sg.s / 10; sg.du = sg.d / 10; }
+const tot = end / 10;
+
+// ================= 背景、暗角、颗粒 =================
+const bgg = ctx.createLinearGradient(0, 0, 0, 1920);
+bgg.addColorStop(0, pal.bg0);
+bgg.addColorStop(1, pal.bg1);
+function bgd() {
+	ctx.fillStyle = bgg;
+	ctx.fillRect(0, 0, 1080, 1920);
+}
+
+// 暗角：竖屏上压成椭圆，四条边都是 0.12
+const vg = ctx.createRadialGradient(0, 0, 0, 0, 0, 540);
+vg.addColorStop(0, 'rgba(60,40,20,0)');
+vg.addColorStop(0.4, 'rgba(60,40,20,0)');
+vg.addColorStop(1, 'rgba(60,40,20,0.12)');
+function vign() {
+	ctx.save();
+	ctx.translate(540, 960);
+	ctx.scale(1, 960 / 540);
+	ctx.fillStyle = vg;
+	ctx.fillRect(-540, -540, 1080, 1080);
+	ctx.restore();
+}
+
+// 颗粒图启动时生成一次，之后每帧只是换个偏移平铺上去
+const nz = document.createElement('canvas');
+nz.width = nz.height = 256;
+{
+	const nc = nz.getContext('2d'), img = nc.createImageData(256, 256), r = mulberry32(20240917);
+	for (let i = 0; i < 256 * 256; i++) {
+		const v = Math.floor(r() * 256);
+		img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+		img.data[i * 4 + 3] = 255;
+	}
+	nc.putImageData(img, 0, 0);
+}
+const npat = ctx.createPattern(nz, 'repeat');
+function nois(t) {
+	const k = Math.floor(Math.floor(t * 30 + 1e-6) / 2);   // 每 2 帧跳一次
+	const r = mulberry32(9001 + k * 7919);
+	const ox = Math.floor(r() * 256), oy = Math.floor(r() * 256);
+	ctx.save();
+	ctx.globalAlpha = 0.06;
+	ctx.translate(ox, oy);
+	ctx.fillStyle = npat;
+	ctx.fillRect(-ox, -oy, 1080, 1920);
+	ctx.restore();
+}
+
+// ================= 回纹 =================
+// 一个回纹单元 4×4 格：从左下角往上，顺着外圈绕进去钩一下，再从底边走到下一个单元
+// v=0 是外侧那条边
+const key = [[0, 4], [0, 0], [3, 0], [3, 3], [2, 3], [2, 1], [1, 1], [1, 4]];
+function keyp(n) {
+	const res = [];
+	for (let k = 0; k < n; k++) for (const [u, v] of key) res.push([u + 4 * k, v]);
+	res.push([4 * n, 4]);
+	return res;
+}
+
+// 边框：距四边 60px，带宽 4 格 × 8px。四条边连成一整条线，顺时针，起点在左上角
+// 四个角各有一个小方块，单独一条子路径
+const bd = { main: new Path2D(), sd: [], sq: [], ml: 0, tot: 0 };
+{
+	const n2 = Math.round(1736 / 32), su2 = 1736 / n2 / 4;   // 竖边 54 个单元，每格稍微拉长一点点刚好铺满
+	const sds = [
+		[28, 8, (u, v) => [92 + u, 60 + v]],       // 上边，往右
+		[n2, su2, (u, v) => [1020 - v, 92 + u]],   // 右边，往下
+		[28, 8, (u, v) => [988 - u, 1860 - v]],    // 下边，往左
+		[n2, su2, (u, v) => [60 + v, 1828 - u]]    // 左边，往上
+	];
+	const sq = [[68, 68], [996, 68], [996, 1836], [68, 1836]];
+	let px = null, py = null;
+	for (let i = 0; i < 4; i++) {
+		const q = new Path2D();
+		q.rect(sq[i][0], sq[i][1], 16, 16);
+		bd.sq.push({ p: q, g: bd.tot });
+		bd.tot += 64;
+		const [n, su, mp] = sds[i];
+		const sd = { g: bd.tot, l: 0 };
+		for (const [u, v] of keyp(n)) {
+			const [x, y] = mp(u * su, v * 8);
+			if (px === null) bd.main.moveTo(x, y);
+			else if (x !== px || y !== py) {
+				bd.main.lineTo(x, y);
+				sd.l += Math.hypot(x - px, y - py);
+			}
+			px = x; py = y;
+		}
+		bd.sd.push(sd);
+		bd.ml += sd.l;
+		bd.tot += sd.l;
+	}
+}
+// p 是描到几成了，0~1
+function bord(p) {
+	if (p <= 0) return;
+	ctx.save();
+	ctx.globalAlpha = 0.18;
+	ctx.strokeStyle = pal.tc;
+	ctx.lineWidth = 3;
+	ctx.lineJoin = 'miter';
+	ctx.lineCap = 'butt';
+	if (p >= 1) {
+		ctx.stroke(bd.main);
+		for (const q of bd.sq) ctx.stroke(q.p);
+	} else {
+		const lp = p * bd.tot;
+		let vis = 0;
+		for (const sd of bd.sd) vis += c01((lp - sd.g) / sd.l) * sd.l;
+		// 虚线只留一段，长度等于已经描到的长度
+		ctx.setLineDash([bd.ml, bd.ml]);
+		ctx.lineDashOffset = bd.ml - vis;
+		ctx.stroke(bd.main);
+		for (const q of bd.sq) {
+			const v = c01((lp - q.g) / 64) * 64;
+			if (v <= 0) continue;
+			ctx.setLineDash([64, 64]);
+			ctx.lineDashOffset = 64 - v;
+			ctx.stroke(q.p);
+		}
+	}
+	ctx.restore();
+}
+
+// 在一条带子上画回纹：mp 把 (沿带子方向, 横跨方向) 的格坐标换成画布坐标，每格一个点，弯的带子也能贴着走
+function band(c, n, mp) {
+	const pts = keyp(n);
+	c.beginPath();
+	let [pu, pv] = pts[0];
+	c.moveTo(...mp(pu, pv));
+	for (let i = 1; i < pts.length; i++) {
+		const [u, v] = pts[i];
+		const m = Math.max(Math.abs(u - pu), Math.abs(v - pv));
+		for (let j = 1; j <= m; j++) c.lineTo(...mp(pu + (u - pu) * j / m, pv + (v - pv) * j / m));
+		pu = u; pv = v;
+	}
+	c.stroke();
+}
+
+// ================= 文字 =================
+let tl = null;   // 排好的文字，字体加载完才有
+
+// 排一行字：每个字的 x 用前缀宽度推出来，这样拉丁字母之间的字距调整也保留着；sp 是额外字间距
+function tlin(str, px, sp) {
+	ctx.font = fnt(px);
+	const cs = Array.from(str), xs = [];
+	let pre = '';
+	for (let i = 0; i < cs.length; i++) {
+		pre += cs[i];
+		xs.push(ctx.measureText(pre).width - ctx.measureText(cs[i]).width + i * sp);
+	}
+	return { cs, xs, px, w: ctx.measureText(str).width + (cs.length - 1) * sp };
+}
+
+// 逐字上浮：第 i 个字从 t0+i*0.035 开始，0.35s 从下方 18px 浮到位
+function chs(c, ln, cx, y, t0, t, col, a) {
+	if (a <= 0) return;
+	c.font = fnt(ln.px);
+	c.fillStyle = col;
+	c.textAlign = 'left';
+	c.textBaseline = 'alphabetic';
+	const x0 = cx - ln.w / 2;
+	for (let i = 0; i < ln.cs.length; i++) {
+		const p = c01((t - t0 - i * 0.035) / 0.35);
+		if (p <= 0) break;   // 后面的字更晚，不用看了
+		const e = eoc(p);
+		c.globalAlpha = a * e;
+		c.fillText(ln.cs[i], x0 + ln.xs[i], y + 18 * (1 - e));
+	}
+	c.globalAlpha = 1;
+}
+
+// 不带动画的一行
+function slin(c, ln, cx, y, col, a) {
+	if (a <= 0) return;
+	c.font = fnt(ln.px);
+	c.fillStyle = col;
+	c.textAlign = 'left';
+	c.textBaseline = 'alphabetic';
+	c.globalAlpha = a;
+	const x0 = cx - ln.w / 2;
+	for (let i = 0; i < ln.cs.length; i++) c.fillText(ln.cs[i], x0 + ln.xs[i], y);
+	c.globalAlpha = 1;
+}
+
+// 一条知识点的字幕、短线和编号。字幕等交叉过渡走完（0.5s）再出，不跟上一条正在淡出的字幕叠在一起
+function capt(sg, lt) {
+	const it = list[sg.i], t0 = 0.5;
+	const fo = eis(pr(lt, sg.du - 0.5, sg.du));   // 最后 0.5s 淡出并上移 10px
+	const a = 1 - fo, dy = -10 * fo;
+	let k = 0;
+	it.tl.forEach((ln, j) => {
+		chs(ctx, ln, 500, 1260 + j * 78 + dy, t0 + k * 0.035, lt, pal.txt, a);
+		k += ln.cs.length;   // 第二行接着第一行的最后一个字往下数
+	});
+	const p = eoc(pr(lt, t0, t0 + 0.4));
+	if (p > 0 && a > 0) {
+		const y = 1260 + (it.tl.length - 1) * 78 + 30 + dy, w = 120 * p;
+		ctx.globalAlpha = a;
+		ctx.fillStyle = pal.tc;
+		ctx.fillRect(500 - w / 2, y, w, 2);
+		ctx.globalAlpha = 1;
+	}
+	// 编号开头 0.3s 淡入，结尾跟字幕一起淡出
+	slin(ctx, it.nl, 500, 270, pal.sub, eis(pr(lt, 0, 0.3)) * a);
+}
+
+// ================= 图层 =================
+// 插画先完整画到图层上，再整张半透明贴回来，不然重叠的色块半透明时会互相透出来
+const ly = document.createElement('canvas');
+ly.width = 1080;
+ly.height = 1920;
+const lc = ly.getContext('2d');
+function lay(a, sc, fn) {
+	if (a <= 0) return;
+	lc.setTransform(1, 0, 0, 1, 0, 0);
+	lc.clearRect(0, 0, 1080, 1920);
+	lc.save();
+	lc.setTransform(sc, 0, 0, sc, 500 * (1 - sc), 820 * (1 - sc));   // 以插画区中心 (500,820) 缩放
+	fn(lc);
+	lc.restore();
+	ctx.globalAlpha = a;
+	ctx.drawImage(ly, 0, 0);
+	ctx.globalAlpha = 1;
+}
+
+// ================= 片头 =================
+// 双耳瓶剪影，高 160，原点在瓶子中心。瓶身和把手都按顺时针走，一次 fill 合成一整块，淡入时重叠处不会变深
+const amph = new Path2D();
+{
+	const p = amph;
+	p.moveTo(-21, -80);
+	p.lineTo(21, -80);
+	p.lineTo(19, -73);
+	p.lineTo(13, -71);
+	p.bezierCurveTo(12, -60, 12, -50, 15, -42);   // 瓶颈
+	p.bezierCurveTo(30, -36, 50, -26, 49, -8);    // 肩膀鼓出来
+	p.bezierCurveTo(48, 20, 28, 46, 12, 58);      // 往下收
+	p.lineTo(10, 66);
+	p.bezierCurveTo(16, 70, 24, 74, 25, 80);      // 圈足
+	p.lineTo(-25, 80);
+	p.bezierCurveTo(-24, 74, -16, 70, -10, 66);
+	p.lineTo(-12, 58);
+	p.bezierCurveTo(-28, 46, -48, 20, -49, -8);
+	p.bezierCurveTo(-50, -26, -30, -36, -15, -42);
+	p.bezierCurveTo(-12, -50, -12, -60, -13, -71);
+	p.lineTo(-19, -73);
+	p.closePath();
+	// 右把手
+	p.moveTo(13, -67);
+	p.bezierCurveTo(30, -76, 46, -70, 44, -50);
+	p.bezierCurveTo(43, -40, 40, -32, 37, -26);
+	p.lineTo(31, -28);
+	p.bezierCurveTo(35, -36, 37, -44, 37, -52);
+	p.bezierCurveTo(37, -64, 28, -66, 13, -60);
+	p.closePath();
+	// 左把手：镜像过来还要倒着走，方向才不会反
+	p.moveTo(-13, -60);
+	p.bezierCurveTo(-28, -66, -37, -64, -37, -52);
+	p.bezierCurveTo(-37, -44, -35, -36, -31, -28);
+	p.lineTo(-37, -26);
+	p.bezierCurveTo(-40, -32, -43, -40, -44, -50);
+	p.bezierCurveTo(-46, -70, -30, -76, -13, -67);
+	p.closePath();
+}
+function opn(c, lt) {
+	const a = eis(pr(lt, 0.3, 1.0));
+	if (a > 0) {
+		c.save();
+		c.globalAlpha = a;
+		c.translate(500, 700);
+		c.fillStyle = pal.blk;
+		c.fill(amph);
+		c.restore();
+	}
+	chs(c, tl.op1, 500, 900, 0.6, lt, pal.blk, 1);
+	chs(c, tl.op2, 500, 990, 0.6 + tl.op1.cs.length * 0.035, lt, pal.tc, 1);
+}
+
+// ================= 01 kore 少女胸像 =================
+// 原点在插画区中心 (500,820)，往下是 +y，左右对称。路径启动时建一次
+const kr = {};
+{
+	let p = new Path2D();
+	// 后面的头发：头顶半个椭圆，两边一路披到肩后，下沿藏在衣服后面
+	p.moveTo(-172, 70);
+	p.bezierCurveTo(-152, -30, -126, -100, -118, -172);
+	p.ellipse(0, -172, 118, 114, 0, Math.PI, Math.PI * 2);
+	p.bezierCurveTo(126, -100, 152, -30, 172, 70);
+	p.closePath();
+	kr.back = p;
+
+	// 头顶那片头发，两边垂到鬓角，把前面几绺辫子的根盖住
+	p = new Path2D();
+	p.moveTo(-118, -172);
+	p.ellipse(0, -172, 118, 114, 0, Math.PI, Math.PI * 2);
+	p.bezierCurveTo(120, -150, 124, -135, 124, -118);
+	p.bezierCurveTo(110, -120, 92, -128, 84, -150);
+	p.lineTo(70, -210);
+	p.lineTo(-70, -210);
+	p.lineTo(-84, -150);
+	p.bezierCurveTo(-92, -128, -110, -120, -124, -118);
+	p.bezierCurveTo(-124, -135, -120, -150, -118, -172);
+	p.closePath();
+	kr.dome = p;
+	// 头顶两道波浪发纹，顺着头形
+	p = new Path2D();
+	for (const f of [0.9, 0.79]) for (let i = 0; i <= 120; i++) {
+		const a = Math.PI + Math.PI * i / 120;
+		const x = 118 * f * Math.cos(a), y = -172 + 114 * f * Math.sin(a) + 2.2 * Math.sin(i / 120 * Math.PI * 18);
+		if (i === 0) p.moveTo(x, y); else p.lineTo(x, y);
+	}
+	kr.grv = p;
+
+	// 脖子，下半截藏在衣服里
+	p = new Path2D();
+	p.moveTo(-36, -90);
+	p.lineTo(36, -90);
+	p.bezierCurveTo(36, -30, 38, 10, 46, 40);
+	p.lineTo(54, 70);
+	p.lineTo(-54, 70);
+	p.lineTo(-46, 40);
+	p.bezierCurveTo(-38, 10, -36, -30, -36, -90);
+	p.closePath();
+	kr.neck = p;
+
+	// 脸：鹅蛋形，下巴圆而结实
+	p = new Path2D();
+	p.moveTo(0, -240);
+	p.bezierCurveTo(46, -240, 76, -230, 82, -205);
+	p.bezierCurveTo(88, -172, 86, -132, 76, -102);
+	p.bezierCurveTo(64, -62, 34, -36, 0, -36);
+	p.bezierCurveTo(-34, -36, -64, -62, -76, -102);
+	p.bezierCurveTo(-86, -132, -88, -172, -82, -205);
+	p.bezierCurveTo(-76, -230, -46, -240, 0, -240);
+	p.closePath();
+	kr.face = p;
+
+	// 袍子：披肩一样从脖子两边斜下去，圆肩，下摆平切
+	const a0 = Math.PI / 9, a1 = Math.PI - a0;   // 领口弧两头 20° 和 160°
+	const nx = 54 * Math.cos(a0), ny = -14 + 54 * Math.sin(a0);
+	p = new Path2D();
+	p.moveTo(nx, ny);
+	p.bezierCurveTo(95, 14, 165, 34, 205, 66);
+	p.bezierCurveTo(234, 90, 245, 126, 247, 166);
+	p.lineTo(250, 285);
+	p.lineTo(-250, 285);
+	p.lineTo(-247, 166);
+	p.bezierCurveTo(-245, 126, -234, 90, -205, 66);
+	p.bezierCurveTo(-165, 34, -95, 14, -nx, ny);
+	p.arc(0, -14, 54, a1, a0, true);
+	p.closePath();
+	kr.robe = p;
+
+	// 领口饰带：圆心 (0,-14) 半径 54~80 的半圈，画的时候裁在袍子里
+	p = new Path2D();
+	p.arc(0, -14, 80, 0, Math.PI, false);
+	p.arc(0, -14, 54, Math.PI, 0, true);
+	p.closePath();
+	kr.col = p;
+	// 下摆饰带
+	p = new Path2D();
+	p.rect(-256, 247, 512, 44);
+	kr.hem = p;
+	// 白大理石上袍子的褶子阴影，细长三角
+	p = new Path2D();
+	for (const [x, y0, w] of [[-36, 82, 8], [0, 76, 6], [36, 82, 8], [-198, 112, 9], [198, 112, 9]]) {
+		p.moveTo(x, y0);
+		p.lineTo(x + w / 2, 247);
+		p.lineTo(x - w / 2, 247);
+		p.closePath();
+	}
+	kr.fold = p;
+
+	// 胸前的波浪辫子，每边 3 绺，从头顶那片头发底下钻出来，越往下越散开，尖头收尾
+	kr.lock = [];
+	for (let k = 2; k >= 0; k--) for (const s of [-1, 1]) {
+		const a = [90, 100, 110][k], b = [100, 123, 146][k];
+		const y0 = -162, y1 = [154, 150, 146][k], n = 104, lf = [], rt = [];
+		for (let i = 0; i <= n; i++) {
+			const y = y0 + (y1 - y0) * i / n;
+			const m = sst(-160, 0, y);
+			const xc = a + (b - a) * m + 5 * Math.sin((y + 160) / 36 * Math.PI * 2);
+			let hw = 7 + 3 * m;
+			if (y > y1 - 30) hw *= Math.cos((y - y1 + 30) / 30 * Math.PI / 2);
+			lf.push([s * (xc - hw), y]);
+			rt.push([s * (xc + hw), y]);
+		}
+		p = new Path2D();
+		p.moveTo(lf[0][0], lf[0][1]);
+		for (const q of lf) p.lineTo(q[0], q[1]);
+		for (let i = rt.length - 1; i >= 0; i--) p.lineTo(rt[i][0], rt[i][1]);
+		p.closePath();
+		kr.lock.push(p);
+	}
+
+	// 杏仁眼，外眼角比内眼角高一点
+	kr.eye = [-1, 1].map(s => {
+		const q = new Path2D();
+		q.moveTo(s * 16, -150);
+		q.bezierCurveTo(s * 28, -168, s * 54, -170, s * 66, -156);
+		q.bezierCurveTo(s * 52, -143, s * 30, -140, s * 16, -150);
+		q.closePath();
+		return q;
+	});
+	kr.brow = [-1, 1].map(s => {
+		const q = new Path2D();
+		q.moveTo(s * 10, -176);
+		q.quadraticCurveTo(s * 40, -198, s * 74, -176);
+		return q;
+	});
+	// 鼻底一弯
+	p = new Path2D();
+	p.moveTo(-13, -112);
+	p.quadraticCurveTo(0, -98, 13, -112);
+	p.quadraticCurveTo(0, -106, -13, -112);
+	p.closePath();
+	kr.nose = p;
+	// 嘴唇：古风式微笑，嘴角往上翘
+	p = new Path2D();
+	p.moveTo(-25, -84);
+	p.bezierCurveTo(-16, -92, -8, -93, 0, -89);
+	p.bezierCurveTo(8, -93, 16, -92, 25, -84);
+	p.bezierCurveTo(18, -68, -18, -68, -25, -84);
+	p.closePath();
+	kr.lip = p;
+	p = new Path2D();
+	p.moveTo(-30, -89);
+	p.quadraticCurveTo(-27, -85.5, -25, -84);
+	p.bezierCurveTo(-12, -78, 12, -78, 25, -84);
+	p.quadraticCurveTo(27, -85.5, 30, -89);
+	kr.seam = p;
+	// 额前一排卷发
+	kr.curl = [];
+	for (let i = 0; i < 9; i++) {
+		const x = -78 + 19.5 * i;
+		kr.curl.push([x, -216 - 12 * (1 - (x / 78) * (x / 78))]);
+	}
+}
+
+// m: 'w' 白大理石，'c' 上色，'g' 只要剪影（画分界那条金线用）
+function kore(c, m) {
+	const w = m === 'w', gd = m === 'g';
+	const fil = (p, cw, cc) => { c.fillStyle = gd ? pal.gld : w ? cw : cc; c.fill(p); };
+	const lin = (p, lw, cw, cc) => {
+		const s = w ? cw : cc;
+		if (gd || !s) return;
+		c.lineWidth = lw;
+		c.strokeStyle = s;
+		c.stroke(p);
+	};
+	c.lineJoin = 'round';
+	c.lineCap = 'round';
+
+	fil(kr.back, pal.ms, pal.wr);
+	fil(kr.neck, pal.mw, pal.skn);
+	lin(kr.neck, 2, pal.ms, null);
+	if (w) {
+		// 下巴在脖子上投的影子
+		c.save();
+		c.clip(kr.neck);
+		c.translate(0, 14);
+		c.fillStyle = pal.ms;
+		c.fill(kr.face);
+		c.restore();
+	}
+
+	fil(kr.robe, pal.mw, pal.blu);
+	if (!gd) {
+		c.save();
+		c.clip(kr.robe);
+		if (w) {
+			c.fillStyle = pal.ms;
+			c.fill(kr.fold);
+			lin(kr.col, 2, pal.ms, null);
+			c.beginPath();
+			c.moveTo(-260, 247);
+			c.lineTo(260, 247);
+			c.lineWidth = 2;
+			c.strokeStyle = pal.ms;
+			c.stroke();
+		} else {
+			c.fillStyle = pal.tc;
+			c.fill(kr.col);
+			c.fill(kr.hem);
+			c.lineWidth = 1.6;
+			c.strokeStyle = pal.blk;
+			c.lineJoin = 'miter';
+			c.lineCap = 'butt';
+			band(c, 12, (u, v) => { const a = u * Math.PI / 48, r = 76 - v * 4.5; return [r * Math.cos(a), -14 + r * Math.sin(a)]; });
+			c.lineWidth = 2;
+			band(c, 19, (u, v) => [-250 + u * 500 / 76, 253 + v * 6.5]);
+			c.lineJoin = 'round';
+			c.lineCap = 'round';
+		}
+		c.restore();
+	}
+	lin(kr.robe, 2, pal.ms, null);
+
+	for (const p of kr.lock) {
+		fil(p, pal.mw, pal.wr);
+		lin(p, 2, pal.ms, pal.blk);
+	}
+
+	fil(kr.dome, pal.mw, pal.wr);
+	lin(kr.dome, 2, pal.ms, null);
+	if (!gd) {
+		c.save();
+		c.clip(kr.dome);
+		lin(kr.grv, 2, pal.ms, pal.blk);
+		c.restore();
+	}
+
+	fil(kr.face, pal.mw, pal.skn);
+	lin(kr.face, 2, pal.ms, null);
+	if (m === 'c') {
+		// 上色以后脸和脖子同色，下巴那一段描一下才分得开
+		c.save();
+		c.beginPath();
+		c.rect(-100, -66, 200, 60);
+		c.clip();
+		c.lineWidth = 2.5;
+		c.strokeStyle = pal.tc;
+		c.stroke(kr.face);
+		c.restore();
+	}
+	if (!gd) {
+		for (let i = 0; i < 2; i++) {
+			const e = kr.eye[i], s = i ? 1 : -1;
+			c.fillStyle = pal.mw;
+			c.fill(e);
+			if (!w) {
+				c.save();
+				c.clip(e);
+				c.beginPath();
+				c.arc(s * 42, -155, 8, 0, Math.PI * 2);
+				c.fillStyle = pal.blk;
+				c.fill();
+				c.restore();
+			}
+			lin(e, w ? 2 : 2.5, pal.ms, pal.blk);
+			lin(kr.brow[i], 2.5, pal.ms, pal.wr);
+		}
+		fil(kr.nose, pal.ms, pal.tc);
+		if (!w) fil(kr.lip, null, pal.tc);
+		lin(kr.seam, 2, pal.ms, pal.blk);
+	}
+
+	for (const [x, y] of kr.curl) {
+		c.beginPath();
+		c.arc(x, y, 13, 0, Math.PI * 2);
+		c.fillStyle = gd ? pal.gld : w ? pal.mw : pal.wr;
+		c.fill();
+		if (gd) continue;
+		if (w) {
+			c.lineWidth = 2;
+			c.strokeStyle = pal.ms;
+			c.stroke();
+		}
+		c.beginPath();
+		c.arc(x, y, 6.5, -Math.PI * 0.6, Math.PI * 1.1);
+		c.lineWidth = w ? 2 : 1.6;
+		c.strokeStyle = w ? pal.ms : pal.blk;
+		c.stroke();
+	}
+}
+
+const sw0 = 1.0, sw1 = 2.6;        // 上色从下往上扫的起止时刻（条内时间）
+const ktop = -292, kbot = 291;     // 扫的范围，胸像上下各多出 6px，正中间就是胸像中部
+function a01(c, lt) {
+	c.save();
+	c.translate(500, 820);
+	const p = eis(pr(lt, sw0, sw1));
+	const yb = kbot + (ktop - kbot) * p;   // 白和彩的分界
+	c.save();
+	c.beginPath();
+	c.rect(-420, -340, 840, yb + 340);
+	c.clip();
+	kore(c, 'w');
+	c.restore();
+	if (p > 0) {
+		c.save();
+		c.beginPath();
+		c.rect(-420, yb, 840, 340 - yb);
+		c.clip();
+		kore(c, 'c');
+		c.restore();
+		if (p < 1) {
+			// 分界处一条 2px 的金线，只落在胸像身上
+			c.save();
+			c.beginPath();
+			c.rect(-420, yb - 1, 840, 2);
+			c.clip();
+			kore(c, 'g');
+			c.restore();
+		}
+	}
+	c.restore();
+}
+
+// ================= 调试叠加 =================
+function dbgo(t) {
+	ctx.save();
+	ctx.fillStyle = 'rgba(255,0,0,0.28)';
+	ctx.fillRect(0, 0, 1080, 220);
+	ctx.fillRect(0, 1540, 1080, 380);
+	ctx.fillRect(930, 220, 150, 1320);
+	let cur = segs[0];
+	for (const sg of segs) if (t >= sg.st) cur = sg;
+	const nm = cur.k === 'op' ? '片头' : cur.k === 'ed' ? '片尾' : two(cur.i);
+	ctx.font = fnt(36);
+	ctx.fillStyle = '#fff';
+	ctx.textAlign = 'left';
+	ctx.textBaseline = 'alphabetic';
+	ctx.fillText(nm + '    t = ' + t.toFixed(3) + 's    条内 ' + (t - cur.st).toFixed(3) + 's', 90, 160);
+	ctx.restore();
+}
+
+// ================= 主函数 =================
+// 画面只由 t 决定，不留任何跨帧状态
+function draw(t) {
+	if (!tl) throw new Error('字体还没加载完，先 await window.ready');
+	t = Math.min(Math.max(t, 0), tot - 1e-6);
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.globalAlpha = 1;
+	bgd();
+	bord(t < 1.2 ? eis(t / 1.2) : 1);
+	const br = 1 + 0.008 * Math.sin(Math.PI * 2 * t / 6);   // 呼吸，6s 一个来回
+	segs.forEach((sg, j) => {
+		const lt = t - sg.st;
+		if (lt < 0 || lt >= sg.du) return;
+		let a = 1, sc = 1;
+		if (j > 0 && lt < 0.5) {
+			const q = eis(lt / 0.5);
+			a = q;
+			sc = 1.03 - 0.03 * q;
+		}
+		if (j < segs.length - 1 && lt > sg.du - 0.5) {
+			const q = eis((lt - sg.du + 0.5) / 0.5);
+			a *= 1 - q;
+			sc *= 1 - 0.03 * q;
+		}
+		if (sg.k === 'op') lay(a, sc * br, c => opn(c, lt));
+		else if (sg.k === 'it') {
+			lay(a, sc * br, c => list[sg.i].art(c, lt, sg.du));
+			capt(sg, lt);
+		}
+	});
+	vign();
+	nois(t);
+	if (dbg) dbgo(t);
+}
+
+// 封面：01 条胸像正好上色到一半，不画字幕和编号，上面加标题
+function drawCover() {
+	if (!tl) throw new Error('字体还没加载完，先 await window.ready');
+	const sg = segs.find(s => s.k === 'it' && s.i === 0);
+	const lt = (sw0 + sw1) / 2, t = sg.st + lt;
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.globalAlpha = 1;
+	bgd();
+	bord(1);
+	lay(1, 1 + 0.008 * Math.sin(Math.PI * 2 * t / 6), c => a01(c, lt));
+	slin(ctx, tl.cov, 500, 360, pal.blk, 1);
+	vign();
+	nois(t);
+}
+
+// ================= 字体和排版 =================
+async function lfnt() {
+	const need = [
+		["50px 'Noto Serif SC'", '古', 'fonts/NotoSerifSC-Regular.otf'],
+		["50px 'Noto Serif'", 'Aα', 'fonts/NotoSerif-Regular.ttf']
+	];
+	for (const [f, s, file] of need) {
+		let got;
+		try {
+			got = await document.fonts.load(f, s);
+		} catch (e) {
+			throw new Error('字体文件读不到：' + file + '（' + e.message + '）。不会退回系统字体，先把字体放进 fonts/');
+		}
+		if (!got.length || got.some(x => x.status !== 'loaded')) throw new Error('字体没加载上：' + file + '。不会退回系统字体，先把字体放进 fonts/');
+	}
+}
+
+window.total = tot;
+window.segs = segs.map(sg => ({ name: sg.k === 'op' ? 'intro' : sg.k === 'ed' ? 'outro' : two(sg.i), start: sg.st, dur: sg.du }));
+window.draw = draw;
+window.drawCover = drawCover;
+window.ready = (async () => {
+	await lfnt();
+	const res = {
+		op1: tlin('古希腊', 96, 0),
+		op2: tlin('vibe 知识大赏', 52, 8),
+		cov: tlin('古希腊 vibe 知识大赏', 64, 0)
+	};
+	// 字幕每行量一下，超过 840px 直接报错，不缩字号不改文案
+	list.forEach((it, i) => {
+		it.tl = it.lns.map((s, j) => {
+			const ln = tlin(s, 50, 0);
+			if (ln.w > 840) throw new Error('第' + two(i) + '条第' + (j + 1) + '行太宽：' + ln.w.toFixed(1) + 'px，超过 840px。「' + s + '」');
+			return ln;
+		});
+		it.nl = tlin(two(i) + ' / ' + String(list.length).padStart(2, '0'), 28, 6);
+	});
+	tl = res;
+})();
+window.ready.catch(e => {
+	console.error('出错了：', e);
+	const el = document.getElementById('err');
+	el.textContent = e.message;
+	el.style.display = 'block';
+});
+
+// ================= 预览 =================
+if (!rnd) window.ready.then(() => {
+	const btn = document.getElementById('btn'), seek = document.getElementById('seek'), tm = document.getElementById('tm');
+	seek.max = tot;
+	let play = true, cur = 0, t0 = null, drag = false;
+	const tick = now => {
+		if (play) {
+			if (t0 === null) t0 = now - cur * 1000;
+			cur = (now - t0) / 1000;
+			if (cur >= tot) { cur = 0; t0 = now; }   // 播完从头再来
+		}
+		draw(cur);
+		if (!drag) seek.value = cur;
+		tm.textContent = cur.toFixed(2) + ' / ' + tot.toFixed(2) + 's';
+		requestAnimationFrame(tick);
+	};
+	requestAnimationFrame(tick);
+	const jump = x => { cur = Math.min(Math.max(x, 0), tot - 0.001); t0 = null; };
+	const tog = () => { play = !play; t0 = null; btn.textContent = play ? '暂停' : '播放'; };
+	btn.onclick = () => { tog(); btn.blur(); };
+	seek.oninput = () => jump(+seek.value);
+	seek.onpointerdown = () => { drag = true; };
+	window.addEventListener('pointerup', () => { drag = false; seek.blur(); });
+	window.addEventListener('keydown', e => {
+		if (e.code === 'Space') { e.preventDefault(); tog(); }
+		else if (e.code === 'ArrowLeft') { e.preventDefault(); jump(cur - 1); }
+		else if (e.code === 'ArrowRight') { e.preventDefault(); jump(cur + 1); }
+	});
+	console.log('预览开始，总长 ' + tot + ' 秒');
+});
+</script>
+</body>
+</html>
